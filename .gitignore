@@ -1,0 +1,15 @@
+*.o
+*.d
+__pycache__
+csr.csv
+build/
+litex_src/
+!litex_src/.keep
+tmp/
+firmware/*.bin
+firmware/*.elf
+firmware/*.elf.map
+venv/
+c64_roms/dist
+!c64_roms/dist/.keep
+/ter-u16b.bdf

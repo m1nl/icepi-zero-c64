@@ -1,0 +1,12 @@
+[submodule "gateware/c64_redip_cia/reDIP-CIA"]
+	path = gateware/c64_redip_cia/reDIP-CIA
+	url = https://github.com/daglem/reDIP-CIA.git
+[submodule "gateware/c64_redip_sid/reDIP-SID"]
+	path = gateware/c64_redip_sid/reDIP-SID
+	url = https://github.com/m1nl/reDIP-SID.git
+[submodule "gateware/vicii-kawari"]
+	path = gateware/vicii-kawari
+	url = https://github.com/m1nl/vicii-kawari.git
+[submodule "gateware/usb_hid_host"]
+	path = gateware/usb_hid_host
+	url = https://github.com/m1nl/usb_hid_host.git

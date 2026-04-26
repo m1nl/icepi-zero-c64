@@ -1,0 +1,7 @@
+{
+  "c64_roms/char.bin": "0x41810000",
+  "c64_roms/kernal.bin": "0x41820000",
+  "c64_roms/basic.bin": "0x41830000",
+  "c64_roms/c1541_rom.bin": "0x60000000",
+  "icepi-zero-c64.bin": "0x40000000"
+}
