@@ -1,0 +1,4 @@
+sim_build
+results.xml
+venv
+dump.vcd

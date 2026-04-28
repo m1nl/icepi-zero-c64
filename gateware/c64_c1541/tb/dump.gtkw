@@ -1,0 +1,79 @@
+[*]
+[*] GTKWave Analyzer v3.3.100 (w)1999-2019 BSI
+[*] Thu Mar 06 00:00:00 2026
+[*]
+[dumpfile] "/home/mnalewajski/dev/ebaz4205/hdl/library/c64_c1541/tb/dump.vcd"
+[savefile] "/home/mnalewajski/dev/ebaz4205/hdl/library/c64_c1541/tb/dump.gtkw"
+[timestart] 0
+[size] 1920 1080
+[pos] -1 -1
+*-13.000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] c1541_gcr_tb_top.
+[sst_width] 250
+[signals_width] 250
+[sst_expanded] 1
+[sst_vpaned_height] 300
+@28
+c1541_gcr_tb_top.clk
+c1541_gcr_tb_top.reset
+c1541_gcr_tb_top.ce
+@200
+-Control Inputs
+@28
+c1541_gcr_tb_top.mode
+c1541_gcr_tb_top.mtr
+c1541_gcr_tb_top.busy
+@22
+c1541_gcr_tb_top.freq[1:0]
+c1541_gcr_tb_top.track[5:0]
+c1541_gcr_tb_top.disk_id[15:0]
+@200
+-Data I/O
+@22
+c1541_gcr_tb_top.dout[7:0]
+c1541_gcr_tb_top.din[7:0]
+@28
+c1541_gcr_tb_top.sync_n
+c1541_gcr_tb_top.sync_cnt[5:0]
+c1541_gcr_tb_top.byte_n
+@200
+-Buffer Interface
+@22
+c1541_gcr_tb_top.buff_addr[12:0]
+c1541_gcr_tb_top.buff_dout[7:0]
+c1541_gcr_tb_top.buff_din[7:0]
+@28
+c1541_gcr_tb_top.buff_we
+c1541_gcr_tb_top.buff_en
+@200
+-Internal State
+@28
+c1541_gcr_tb_top.c1541_gcr_inst.state
+c1541_gcr_tb_top.c1541_gcr_inst.stall
+c1541_gcr_tb_top.c1541_gcr_inst.nibble
+c1541_gcr_tb_top.c1541_gcr_inst.sync_in_n
+c1541_gcr_tb_top.c1541_gcr_inst.bit_clk_en
+c1541_gcr_tb_top.c1541_gcr_inst.authorize_write
+c1541_gcr_tb_top.c1541_gcr_inst.sector_done
+c1541_gcr_tb_top.c1541_gcr_inst.byte_ready
+c1541_gcr_tb_top.c1541_gcr_inst.byte_ready_r
+@22
+c1541_gcr_tb_top.c1541_gcr_inst.data[7:0]
+c1541_gcr_tb_top.c1541_gcr_inst.sector[4:0]
+c1541_gcr_tb_top.c1541_gcr_inst.byte_cnt[8:0]
+c1541_gcr_tb_top.c1541_gcr_inst.bit_cnt[2:0]
+c1541_gcr_tb_top.c1541_gcr_inst.gcr_bit_cnt[2:0]
+c1541_gcr_tb_top.c1541_gcr_inst.sync_cnt[5:0]
+c1541_gcr_tb_top.c1541_gcr_inst.bit_clk_cnt[5:0]
+c1541_gcr_tb_top.c1541_gcr_inst.byte_n_cnt[6:0]
+@200
+-GCR Data
+@22
+c1541_gcr_tb_top.c1541_gcr_inst.data[7:0]
+c1541_gcr_tb_top.c1541_gcr_inst.data_cks[7:0]
+c1541_gcr_tb_top.c1541_gcr_inst.gcr_byte[7:0]
+c1541_gcr_tb_top.c1541_gcr_inst.gcr_nibble[4:0]
+c1541_gcr_tb_top.c1541_gcr_inst.gcr_nibble_out[4:0]
+c1541_gcr_tb_top.c1541_gcr_inst.nibble_out[3:0]
+[pattern_trace] 1
+[pattern_trace] 0
