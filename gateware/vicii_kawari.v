@@ -25,7 +25,7 @@
 
 `timescale 1ns/1ps
 
-`include "config.vh"
+`include "vicii_kawari.vh"
 `include "vicii-kawari/hdl/common.vh"
 
 module vicii_kawari #(
