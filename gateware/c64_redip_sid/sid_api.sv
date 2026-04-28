@@ -59,14 +59,14 @@ module sid_api (
 
     // Pick requested SID variant
     assign sid1_cfg.model     = sid_model ? sid::MOS8580 : sid::MOS6581;
-    assign sid1_cfg.variant   = 0;
+    assign sid1_cfg.variant   = sid::VARIANT_A;
     assign sid1_cfg.addr      = sid::D400;
     assign sid1_cfg.fc_base   = 9'd245;
     assign sid1_cfg.fc_offset = -11'sd780;
 
     assign sid2_cfg.model     = sid_model ? sid::MOS8580 : sid::MOS6581;
-    assign sid2_cfg.variant   = sid_variants ? 1 : 0;
-    assign sid2_cfg.addr      = sid_mono ? sid::D400 : (sid::D420 | sid::D500);
+    assign sid2_cfg.variant   = sid_variants ? sid::VARIANT_B : sid::VARIANT_A;
+    assign sid2_cfg.addr      = sid_mono ? (sid::D400 | sid::D420 | sid::D500) : (sid::D420 | sid::D500);
     assign sid2_cfg.fc_base   = 9'd240;
     assign sid2_cfg.fc_offset = -11'sd785;
 
@@ -179,11 +179,11 @@ module sid_api (
         // Chip select decode.
         // SID 2 address is configurable.
         // SID 1 is always located at D400.
-        sid_cs[1] = sid2_cfg.addr == sid::D400 ? ~cs.cs_n :
+        sid_cs[1] = sid2_cfg.addr[sid::D400_BIT] & ~cs.cs_n |
                     sid2_cfg.addr[sid::D420_BIT] & ~cs.cs_n & cs.a5 |
                     sid2_cfg.addr[sid::D500_BIT] & ~cs.cs_n & cs.a8 |
                     sid2_cfg.addr[sid::DE00_BIT] & ~cs.cs_io1_n;
-        sid_cs[0] = sid2_cfg.addr == sid::D400 ? ~cs.cs_n :
+        sid_cs[0] = sid2_cfg.addr[sid::D400_BIT] & ~cs.cs_n |
                     ~cs.cs_n & ~sid_cs[1];
 
         // Default to SID 1.
