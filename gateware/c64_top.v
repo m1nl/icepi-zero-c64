@@ -219,7 +219,7 @@ vicii_kawari #(
 assign overlay_pixel_x = vic_h_count_dvi;
 assign overlay_pixel_y = vic_v_count_dvi;
 
-assign vic_overlay_pixel_valid = overlay_pixel_valid && flags[5];
+assign vic_overlay_pixel_valid = overlay_pixel_valid && flags[6];
 
 // ---------------------------------------------------------------------------
 // cpu6510_0
@@ -270,30 +270,32 @@ wire       sid_cen;
 wire       sid_we;
 wire       sid_model     = flags[1];
 wire       sid_dual      = flags[2];
-wire       sid_auto_mono = flags[3];
+wire       sid_pan       = flags[3];
+wire       sid_auto_mono = flags[4];
 wire       sid_pot_x;
 wire       sid_pot_y;
 
 c64_redip_sid c64_redip_sid_0 (
-  .clk                       (clk),
-  .reset                     (cpu_reset),
-  .clk_phi                   (vic_clk_phi),
-  .phi2_n                    (vic_phi2_n && !vic_stall),
-  .clk_sample                (tmds_clk),
-  .reset_sample              (tmds_rst),
-  .cen                       (sid_cen),
-  .we                        (sid_we),
-  .addr                      (sid_addr),
-  .din                       (sid_din),
-  .dout                      (sid_dout),
-  .audio_sample_en           (vic_audio_sample_en),
-  .audio_sample_word_0       (sid_audio_sample_word_0),
-  .audio_sample_word_1       (sid_audio_sample_word_1),
-  .sid_model                 (sid_model),
-  .sid_dual                  (sid_dual),
-  .sid_auto_mono             (sid_auto_mono),
-  .pot_x                     (sid_pot_x),
-  .pot_y                     (sid_pot_y)
+  .clk                 (clk),
+  .reset               (cpu_reset),
+  .clk_phi             (vic_clk_phi),
+  .phi2_n              (vic_phi2_n && !vic_stall),
+  .clk_sample          (tmds_clk),
+  .reset_sample        (tmds_rst),
+  .cen                 (sid_cen),
+  .we                  (sid_we),
+  .addr                (sid_addr),
+  .din                 (sid_din),
+  .dout                (sid_dout),
+  .audio_sample_en     (vic_audio_sample_en),
+  .audio_sample_word_0 (sid_audio_sample_word_0),
+  .audio_sample_word_1 (sid_audio_sample_word_1),
+  .sid_model           (sid_model),
+  .sid_dual            (sid_dual),
+  .sid_pan             (sid_pan),
+  .sid_auto_mono       (sid_auto_mono),
+  .pot_x               (sid_pot_x),
+  .pot_y               (sid_pot_y)
 );
 
 // ---------------------------------------------------------------------------
@@ -416,7 +418,7 @@ wire [7:0] hid_key_3;
 c64_keyboard c64_keyboard_0 (
   .clk                  (clk),
   .reset                (cpu_reset),
-  .enable               (!flags[5] && !hid_key_alt),
+  .enable               (!flags[6] && !hid_key_alt),
   .pa_out               (cia1_pa_out),
   .pa_in                (cia1_pa_in),
   .ddra                 (cia1_ddra),
@@ -431,10 +433,10 @@ c64_keyboard c64_keyboard_0 (
   .freeze_pulse         (kbd_freeze_pulse),
   .pot_x                (joy_pot_x),
   .pot_y                (joy_pot_y),
-  .joy_emulation        (flags[10:9]),
-  .joy_invert           (flags[6]),
-  .joy_button_space     (flags[7]),
-  .joy_keyboard_control (flags[8]),
+  .joy_emulation        (flags[11:10]),
+  .joy_invert           (flags[7]),
+  .joy_button_space     (flags[8]),
+  .joy_keyboard_control (flags[9]),
   .joy_a                (joy_a),
   .joy_b                (joy_b),
   .hid_key_report       (hid_key_report),
@@ -487,7 +489,7 @@ wire c1541_iec_clk_in;
 
 wire        c1541_rom_en;
 wire [13:0] c1541_rom_addr;
-wire  [7:0] c1541_rom_dout;
+reg   [7:0] c1541_rom_dout;
 
 wire [12:0] buff_addr;
 reg   [7:0] buff_dout;
@@ -645,7 +647,7 @@ usb_hid_host_dual usb_hid_host_dual_0 (
   .mouse_dy      ()
 );
 
-assign hid_key_report_out = hid_key_report && (flags[5] || hid_key_alt) &&
+assign hid_key_report_out = hid_key_report && (flags[6] || hid_key_alt) &&
   (hid_key_1 == 0 && hid_key_2 == 0 && hid_key_3 == 0);
 
 assign hid_key_modifiers_out = hid_key_modifiers;
@@ -837,18 +839,18 @@ c64_bus_arbiter c64_bus_arbiter_0 (
   .cia2_pa_out (cia2_pa_out),
   .cia2_ddra   (cia2_ddra),
 
-  .cart_present   (cart_present),
-  .cart_game      (cart_game),
-  .cart_exrom     (cart_exrom),
-  .cart_io1_cen   (cart_io1_cen),
-  .cart_io2_cen   (cart_io2_cen),
-  .cart_roml      (cart_roml),
-  .cart_romh      (cart_romh),
-  .cart_dout      (cart_dout),
-  .cart_din       (cart_din),
-  .cart_ba        (cart_ba),
-  .cart_we        (cart_we),
-  .cart_addr      (cart_addr),
+  .cart_present (cart_present),
+  .cart_game    (cart_game),
+  .cart_exrom   (cart_exrom),
+  .cart_io1_cen (cart_io1_cen),
+  .cart_io2_cen (cart_io2_cen),
+  .cart_roml    (cart_roml),
+  .cart_romh    (cart_romh),
+  .cart_dout    (cart_dout),
+  .cart_din     (cart_din),
+  .cart_ba      (cart_ba),
+  .cart_we      (cart_we),
+  .cart_addr    (cart_addr),
 
   .roml_select (roml_select),
   .romh_select (romh_select),
@@ -877,13 +879,14 @@ c64_bus_arbiter c64_bus_arbiter_0 (
   .c1541_iec_data_in  (c1541_iec_data_in),
   .c1541_iec_clk_in   (c1541_iec_clk_in),
 
-  .va_delay              (flags[4]),
-  .iec_master_disconnect (flags[12])
+  .va_delay              (flags[5]),
+  .iec_master_disconnect (flags[13])
 );
 
-always @(posedge clk)
+always @(posedge clk) begin
   if (cpu_reset)
-    cart_present <= flags[11];
+    cart_present <= flags[12];
+end
 
 // ---------------------------------------------------------------------------
 // c64_ram_color_0

@@ -43,37 +43,69 @@ module c64_redip_sid (
   output wire [7:0] dout,
 
   input  wire               audio_sample_en,
-  output wire signed [23:0] audio_sample_word_0,
-  output wire signed [23:0] audio_sample_word_1,
+  output reg  signed [23:0] audio_sample_word_0,
+  output reg  signed [23:0] audio_sample_word_1,
 
   input wire sid_model,
   input wire sid_dual,
+  input wire sid_pan,
   input wire sid_auto_mono,
 
   input wire pot_x,
   input wire pot_y
 );
 
+wire sid_mono;
+wire sid_mono_sample;
+
+wire sid_pan_sample;
+
 // audio output
+
+cdc_sync #(
+  .WIDTH(2)
+) cdc_sync_0 (
+  .clk_dst(clk_sample),
+  .rst_dst(reset_sample),
+  .in({sid_mono, sid_pan}),
+  .out({sid_mono_sample, sid_pan_sample})
+);
 
 wire [39:0] audio_sample_word;
 
-assign audio_sample_word_0 = {audio_sample_word[19: 0], 4'b0};
-assign audio_sample_word_1 = {audio_sample_word[39:20], 4'b0};
+always @(*) begin
+  if (sid_pan_sample && !sid_mono_sample) begin
+    audio_sample_word_0 = {
+      {{2{audio_sample_word[19]}}, audio_sample_word[19: 0]} +
+      {{1{audio_sample_word[19]}}, audio_sample_word[19: 0], 1'b0} +
+      {{2{audio_sample_word[39]}}, audio_sample_word[39:20]},
+      2'b0};  // L = 0.75L' + 0.25R'
+
+    audio_sample_word_1 = {
+      {{2{audio_sample_word[39]}}, audio_sample_word[39:20]} +
+      {{1{audio_sample_word[39]}}, audio_sample_word[39:20], 1'b0} +
+      {{2{audio_sample_word[19]}}, audio_sample_word[19: 0]},
+      2'b0};  // R = 0.75R' + 0.25L'
+
+  end else begin
+    audio_sample_word_0 = {audio_sample_word[19: 0], 4'b0};
+    audio_sample_word_1 = {audio_sample_word[39:20], 4'b0};
+  end
+end
 
 // audio sampling
 
 wire signed [19:0] wave_0;
 wire signed [19:0] wave_1;
 
-wire signed [19:0] wave_0_tmds;
-wire signed [19:0] wave_1_tmds;
+wire signed [19:0] wave_0_sample;
+wire signed [19:0] wave_1_sample;
 
-wire wave_0_tmds_ready;
-wire wave_1_tmds_ready;
+wire wave_0_sample_ready;
+wire wave_1_sample_ready;
 
-wire wave_0_tmds_valid;
-wire wave_1_tmds_valid;
+wire wave_0_sample_valid;
+wire wave_1_sample_valid;
 
 wire wave_0_src_busy;
 wire wave_1_src_busy;
@@ -108,9 +140,9 @@ cdc_handshake #(
   .busy(wave_0_src_busy),
   .clk_dst(clk_sample),
   .rst_dst(reset_sample),
-  .data_out(wave_0_tmds),
-  .valid(wave_0_tmds_valid),
-  .ack_in(wave_0_tmds_ready)
+  .data_out(wave_0_sample),
+  .valid(wave_0_sample_valid),
+  .ack_in(wave_0_sample_ready)
 );
 
 cdc_handshake #(
@@ -124,30 +156,30 @@ cdc_handshake #(
   .busy(wave_1_src_busy),
   .clk_dst(clk_sample),
   .rst_dst(reset_sample),
-  .data_out(wave_1_tmds),
-  .valid(wave_1_tmds_valid),
-  .ack_in(wave_1_tmds_ready)
+  .data_out(wave_1_sample),
+  .valid(wave_1_sample_valid),
+  .ack_in(wave_1_sample_ready)
 );
 
 dc_blocker dc_blocker_0 (
   .clk(clk_sample),
   .reset(reset_sample),
-  .in_valid(wave_0_tmds_valid),
-  .in_ready(wave_0_tmds_ready),
+  .in_valid(wave_0_sample_valid),
+  .in_ready(wave_0_sample_ready),
   .out_ready(audio_sample_en),
   .out_valid(),
-  .in(wave_0_tmds),
+  .in(wave_0_sample),
   .out(audio_sample_word[19:0])
 );
 
 dc_blocker dc_blocker_1 (
   .clk(clk_sample),
   .reset(reset_sample),
-  .in_valid(wave_1_tmds_valid),
-  .in_ready(wave_1_tmds_ready),
+  .in_valid(wave_1_sample_valid),
+  .in_ready(wave_1_sample_ready),
   .out_ready(audio_sample_en),
   .out_valid(),
-  .in(wave_1_tmds),
+  .in(wave_1_sample),
   .out(audio_sample_word[39:20])
 );
 
@@ -201,8 +233,6 @@ assign addr_latched = clk_phi ? addr : addr_r;
 assign din_latched  = clk_phi ? din  : din_r;
 
 // mono control
-
-wire sid_mono;
 
 assign sid_mono = !sid_dual || (mono_timer == 0 && sid_auto_mono);
 
