@@ -241,7 +241,7 @@ class VideoTerminalOverlay(LiteXModule):
             "INCR-X",
             NextValue(x_term, x_term + 1),
             NextState("IDLE"),
-            If(x_term == (term_columns - 1), NextValue(x_term, 0), NextState("INCR-Y")),
+            If(x_term == (term_columns - 1), NextValue(x_term_i, 0), NextState("INCR-Y")),
         )
         uart_fsm.act("RST-Y", NextValue(y_term, 0), NextValue(x_term_i, 0), NextState("CLEAR-X"))
         uart_fsm.act(
