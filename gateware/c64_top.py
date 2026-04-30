@@ -31,7 +31,7 @@ from gateware.video_terminal_overlay import VideoOverlay
 
 class C64Control(LiteXModule):
     def __init__(self):
-        self.flags = CSRStorage(16, reset=0b0001000011111111, description="C64 flags")
+        self.flags = CSRStorage(16, reset=0b0000100111111111, description="C64 flags")
         self.vic_reset_req = CSRStorage(1, reset=0, description="C64 VIC reset request")
         self.cpu_reset_req = CSRStorage(1, reset=1, description="C64 CPU reset request")
         self.cpu_pause_req = CSRStorage(1, reset=0, description="C64 CPU puse request")

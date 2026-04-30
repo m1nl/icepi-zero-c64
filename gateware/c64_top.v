@@ -417,7 +417,7 @@ wire [7:0] hid_key_3;
 
 c64_keyboard c64_keyboard_0 (
   .clk                  (clk),
-  .reset                (cpu_reset),
+  .reset                (rst || vic_reset_req),
   .enable               (!flags[6] && !hid_key_alt),
   .pa_out               (cia1_pa_out),
   .pa_in                (cia1_pa_in),
@@ -433,10 +433,9 @@ c64_keyboard c64_keyboard_0 (
   .freeze_pulse         (kbd_freeze_pulse),
   .pot_x                (joy_pot_x),
   .pot_y                (joy_pot_y),
-  .joy_emulation        (flags[11:10]),
+  .joy_emulation        (flags[10:9]),
   .joy_invert           (flags[7]),
   .joy_button_space     (flags[8]),
-  .joy_keyboard_control (flags[9]),
   .joy_a                (joy_a),
   .joy_b                (joy_b),
   .hid_key_report       (hid_key_report),
@@ -603,7 +602,7 @@ assign usb_dp_1 = usb_oe_bus[1] ? usb_dp_o_bus[1] : 1'bz;
 
 usb_hid_host_dual usb_hid_host_dual_0 (
   .clk           (clk),
-  .reset         (cpu_reset),
+  .reset         (rst || vic_reset_req),
   .usb_clk       (usb_clk),
   .usb_rst       (usb_rst),
   .usb_dm_i      (usb_dm_i_bus),
@@ -880,12 +879,12 @@ c64_bus_arbiter c64_bus_arbiter_0 (
   .c1541_iec_clk_in   (c1541_iec_clk_in),
 
   .va_delay              (flags[5]),
-  .iec_master_disconnect (flags[13])
+  .iec_master_disconnect (flags[12])
 );
 
 always @(posedge clk) begin
   if (cpu_reset)
-    cart_present <= flags[12];
+    cart_present <= flags[11];
 end
 
 // ---------------------------------------------------------------------------

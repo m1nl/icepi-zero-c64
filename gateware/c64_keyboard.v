@@ -61,7 +61,6 @@ module c64_keyboard #(
   input wire [1:0] joy_emulation,
   input wire       joy_invert,
   input wire       joy_button_space,
-  input wire       joy_keyboard_control,
 
   input wire [9:0] joy_a,
   input wire [9:0] joy_b,
@@ -172,9 +171,11 @@ wire reset_combined = key_reset || joy_reset;
 
 reg reset_combined_i;
 
-// game_sel + game_sta
+// game_sel + game_sta OR game_a + game_b + game_x + game_y
 assign joy_reset = joy_a == 10'b1100000000 ||
-                   joy_b == 10'b1100000000;
+                   joy_b == 10'b1100000000 ||
+                   joy_a == 10'b0011110000 ||
+                   joy_b == 10'b0011110000;
 
 always @(posedge clk) begin
   if (reset) begin
@@ -192,15 +193,10 @@ end
 
 localparam KEY_F12 = 8'h45;
 
-wire joy_freeze;
 wire key_freeze = hid_keys[0] == KEY_F12;
-wire freeze_combined = key_freeze || joy_freeze;
+wire freeze_combined = key_freeze;
 
 reg freeze_combined_i;
-
-// game_sta
-assign joy_freeze = joy_a == 10'b1000000000 ||
-                    joy_b == 10'b1000000000;
 
 always @(posedge clk) begin
   if (reset) begin
@@ -357,16 +353,8 @@ wire [6:0] joy_b_combined;
 wire [6:0] joy_a_i;
 wire [6:0] joy_b_i;
 
-assign joy_a_combined = (joy_emulation[0] ? {2'b00, key_F, key_right, key_left, key_down, key_up} : 7'b0) | joy_a[6:0];
-assign joy_b_combined = (joy_emulation[1] ? {2'b00, key_F, key_right, key_left, key_down, key_up} : 7'b0) | joy_b[6:0];
-
-assign joy_a_i = (!enable || joy_keyboard_control) ? 7'b0 : (joy_invert ? joy_b_combined[6:0] : joy_a_combined[6:0]);
-assign joy_b_i = (!enable || joy_keyboard_control) ? 7'b0 : (joy_invert ? joy_a_combined[6:0] : joy_b_combined[6:0]);
-
-assign pot_x = (pa_out_od[6] && joy_a_i[5]) || (pa_out_od[7] && joy_b_i[5]);
-assign pot_y = (pa_out_od[6] && joy_a_i[6]) || (pa_out_od[7] && joy_b_i[6]);
-
-wire joy_keyboard_control_i;
+wire joy_keyboard_control;
+wire joy_button_space_i;
 
 wire key_up_i;
 wire key_down_i;
@@ -375,16 +363,31 @@ wire key_right_i;
 
 wire key_space_i;
 wire key_return_i;
+wire key_F1_i;
+wire key_F3_i;
 
-assign joy_keyboard_control_i = enable && joy_keyboard_control;
+assign joy_a_combined = (joy_emulation[0] ? {1'b0, key_space, key_F, key_right, key_left, key_down, key_up} : 7'b0) | joy_a[6:0];
+assign joy_b_combined = (joy_emulation[1] ? {1'b0, key_space, key_F, key_right, key_left, key_down, key_up} : 7'b0) | joy_b[6:0];
 
-assign key_up_i    = (!joy_emulation_enabled && key_up)    || (joy_keyboard_control_i && (joy_a[0] || joy_b[0]));
-assign key_down_i  = (!joy_emulation_enabled && key_down)  || (joy_keyboard_control_i && (joy_a[1] || joy_b[1]));
-assign key_left_i  = (!joy_emulation_enabled && key_left)  || (joy_keyboard_control_i && (joy_a[2] || joy_b[2]));
-assign key_right_i = (!joy_emulation_enabled && key_right) || (joy_keyboard_control_i && (joy_a[3] || joy_b[3]));
+assign joy_a_i = (joy_keyboard_control || joy_reset) ? 7'b0 : (joy_invert ? joy_b_combined[6:0] : joy_a_combined[6:0]);
+assign joy_b_i = (joy_keyboard_control || joy_reset) ? 7'b0 : (joy_invert ? joy_a_combined[6:0] : joy_b_combined[6:0]);
 
-assign key_return_i = key_return || (joy_keyboard_control_i && (joy_a[4] || joy_b[4]));
-assign key_space_i  = key_space || ((joy_keyboard_control_i || joy_button_space) && (joy_a[5] || joy_b[5]));
+assign pot_x = (pa_out_od[6] && joy_a_i[5]) || (pa_out_od[7] && joy_b_i[5]);  // B
+assign pot_y = (pa_out_od[6] && joy_a_i[6]) || (pa_out_od[7] && joy_b_i[6]);  // X
+
+assign joy_keyboard_control = enable && !joy_reset && (joy_a[7] || joy_b[7]);  // Y
+assign joy_button_space_i   = enable && !joy_reset && joy_button_space && (joy_a[5] || joy_b[5]);  // B
+
+assign key_up_i    = (!joy_emulation_enabled && key_up)    || (joy_keyboard_control && (joy_a[0] || joy_b[0]));
+assign key_down_i  = (!joy_emulation_enabled && key_down)  || (joy_keyboard_control && (joy_a[1] || joy_b[1]));
+assign key_left_i  = (!joy_emulation_enabled && key_left)  || (joy_keyboard_control && (joy_a[2] || joy_b[2]));
+assign key_right_i = (!joy_emulation_enabled && key_right) || (joy_keyboard_control && (joy_a[3] || joy_b[3]));
+
+assign key_F1_i    = key_F1 || (joy_keyboard_control && (joy_a[9] || joy_b[9]));  // game_sta
+assign key_F3_i    = key_F3 || (joy_keyboard_control && (joy_a[8] || joy_b[8]));  // game_sel
+
+assign key_return_i = key_return || (joy_keyboard_control && (joy_a[4] || joy_b[4]));  // A
+assign key_space_i  = key_space  || (joy_keyboard_control && (joy_a[5] || joy_b[5])) || joy_button_space_i;  // B
 
 wire mod_shift;
 wire shift;
@@ -404,8 +407,8 @@ assign pa_in[0] = pa_out_od[0] & ~joy_b_i[0] &
     (pb_out_biased[1] | ~key_return_i) &
     (pb_out_biased[2] | ~(key_left_i | key_right_i)) &
     (pb_out_biased[3] | ~(key_F7 | key_F8)) &
-    (pb_out_biased[4] | ~(key_F1 | key_F2)) &
-    (pb_out_biased[5] | ~(key_F3 | key_F4)) &
+    (pb_out_biased[4] | ~(key_F1_i | key_F2)) &
+    (pb_out_biased[5] | ~(key_F3_i | key_F4)) &
     (pb_out_biased[6] | ~(key_F5 | key_F6)) &
     (pb_out_biased[7] | ~(key_up_i | key_down_i))
    ));
@@ -540,7 +543,7 @@ assign pb_in[3] = pb_out_biased[3] & ~joy_a_i[3] &
    );
 
 assign pb_in[4] = pb_out_biased[4] & ~joy_a_i[4] &
-   ((pa_out_od[0] | ~(key_F1 | key_F2)) &
+   ((pa_out_od[0] | ~(key_F1_i | key_F2)) &
     (pa_out_od[1] | ~key_Z) &
     (pa_out_od[2] | ~key_C) &
     (pa_out_od[3] | ~key_B) &
@@ -551,7 +554,7 @@ assign pb_in[4] = pb_out_biased[4] & ~joy_a_i[4] &
    );
 
 assign pb_in[5] = pb_out_biased[5] &
-   ((pa_out_od[0] | ~(key_F3 | key_F4)) &
+   ((pa_out_od[0] | ~(key_F3_i | key_F4)) &
     (pa_out_od[1] | ~key_S) &
     (pa_out_od[2] | ~(!joy_emulation_enabled & key_F)) &
     (pa_out_od[3] | ~key_H) &

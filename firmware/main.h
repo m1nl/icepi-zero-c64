@@ -20,11 +20,10 @@
 #define FLAG_OVERLAY 6
 #define FLAG_JOY_INVERT 7
 #define FLAG_JOY_BUTTON_SPACE 8
-#define FLAG_JOY_KEYBOARD_CONTROL 9
-#define FLAG_JOY_EMULATION_0 10
-#define FLAG_JOY_EMULATION_1 11
-#define FLAG_CART_PRESENT 12
-#define FLAG_IEC_MASTER_DISCONNECT 13
+#define FLAG_JOY_EMULATION_0 9
+#define FLAG_JOY_EMULATION_1 10
+#define FLAG_CART_PRESENT 11
+#define FLAG_IEC_MASTER_DISCONNECT 12
 
 enum {
     COMMAND_HELP = 0,
@@ -65,8 +64,7 @@ const struct {
     {"va_delay", 5, "VA14/VA15 glitch delay (U14 emulation)"},
     {"overlay", 6, "Video terminal overlay enable"},
     {"joy_invert", 7, "Invert joystick ports"},
-    {"joy_button_space", 8, "Joystick fire button maps to Space"},
-    {"joy_keyboard_control", 9, "Joysticks mapped as keyboard"},
+    {"joy_button_space", 8, "Joystick 2nd button maps to Space"},
     {"joy_emulation_0", 10, "Joystick port 1 keyboard emulation"},
     {"joy_emulation_1", 11, "Joystick port 2 keyboard emulation"},
     {"cart_present", 12, "Cartridge present"},
