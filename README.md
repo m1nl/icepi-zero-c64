@@ -37,7 +37,7 @@ I have tested the following devices and can confirm they work properly:
 - SpeedLink COMPETITION PRO Extra USB Joystick
 - Logitech Keyboard with Logitech Unifying Receiver
 
-Other USB HID devices should generally work as well. However, avoid combo devices that include built-in USB hub functionality. Each port supports only a single device, as it has a separate USB soft controller attached to it.
+Other low-speed and full-speed USB 2.0 HID devices should generally work as well. However, avoid combo devices that include built-in USB hub functionality. Each port supports only a single device, as it has a separate USB soft controller attached to it.
 
 ## Building
 
