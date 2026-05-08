@@ -75,7 +75,6 @@ assign led = act;
 reg        present    = 0;
 reg        readonly   = 1;
 reg        disk_ready = 0;
-reg [15:0] disk_id    = 16'b0;
 reg [24:0] ch_timeout = 25'h1FFFFFF;
 
 always @(posedge clk) begin
@@ -83,7 +82,6 @@ always @(posedge clk) begin
     present    <= img_size != 32'd0;
     readonly   <= img_readonly;
     disk_ready <= 0;
-    disk_id    <= img_id;
     ch_timeout <= 25'h1FFFFFF;
 
   end else if (ch_timeout == 25'd0)
@@ -163,7 +161,7 @@ c1541_gcr c1541_gcr (
   .busy(busy || !disk_ready || track_delay),
 
   .img_mounted(img_mounted),
-  .disk_id(disk_id),
+  .img_id(img_id),
   .track(track),
 
   .buff_addr(buff_addr),
@@ -183,8 +181,8 @@ c1541_track c1541_track (
   .block_wr(block_wr),
   .block_ack(block_ack),
 
-  .save_track(save_track),
   .img_mounted(img_mounted),
+  .save_track(save_track),
   .track(track),
   .busy(busy)
 );

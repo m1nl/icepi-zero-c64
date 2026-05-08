@@ -174,10 +174,8 @@ int c64_disk_mount(const char *path, int rw) {
     d64_size = size;
     d64_dirty = 0;
 
-    uint32_t img_id = 0;
-    if (d64_size > TRACK18_OFFSET + 0xA4) {
-        img_id = ((uint32_t)d64_data[TRACK18_OFFSET + 0xA2] << 8) | (uint32_t)d64_data[TRACK18_OFFSET + 0xA3];
-    }
+    uint16_t img_id = ((uint16_t)d64_data[TRACK18_OFFSET + BAM_DISK_ID_OFFSET + 1] << 8) |
+                      (uint16_t)d64_data[TRACK18_OFFSET + BAM_DISK_ID_OFFSET];
 
     c64_control_img_size_write(d64_size);
     c64_control_img_id_write(img_id);
@@ -373,8 +371,8 @@ int c64_disk_format(const char *path, const char *label) {
     x *= 0xc4ceb9fe1a85ec53ULL;
     x ^= x >> 33;
 
-    uint8_t id0 = 65 + (x % 25);
-    uint8_t id1 = 65 + ((x >> 8) % 25);
+    uint8_t id1 = 65 + (x % 25);
+    uint8_t id2 = 65 + ((x >> 8) % 25);
 
     memcpy(d64_data + TRACK18_OFFSET, format_track_18, sizeof(format_track_18));
     memset(d64_data + TRACK18_OFFSET + BAM_DISK_NAME_OFFSET, BAM_DISK_NAME_PAD, BAM_DISK_NAME_SIZE);
@@ -387,8 +385,8 @@ int c64_disk_format(const char *path, const char *label) {
     memcpy(d64_data + TRACK18_OFFSET + BAM_DISK_NAME_OFFSET, label, label_len);
     ascii_to_petscii_upper_str((char *)d64_data + TRACK18_OFFSET + BAM_DISK_NAME_OFFSET, label_len);
 
-    d64_data[TRACK18_OFFSET + BAM_DISK_ID_OFFSET] = id0;
-    d64_data[TRACK18_OFFSET + BAM_DISK_ID_OFFSET + 1] = id1;
+    d64_data[TRACK18_OFFSET + BAM_DISK_ID_OFFSET] = id1;
+    d64_data[TRACK18_OFFSET + BAM_DISK_ID_OFFSET + 1] = id2;
 
     d64_size = size;
     d64_dirty = 1;
@@ -398,7 +396,7 @@ int c64_disk_format(const char *path, const char *label) {
         return -1;
     }
 
-    uint32_t img_id = (id1 << 8) | id0;
+    uint16_t img_id = (((uint16_t)id2) << 8) | ((uint16_t)id1);
 
     c64_control_img_size_write(d64_size);
     c64_control_img_id_write(img_id);

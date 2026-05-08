@@ -33,8 +33,8 @@ module c1541_track (
   output reg         block_wr,
   input  wire        block_ack,
 
-  input  wire        save_track,
   input  wire        img_mounted,
+  input  wire        save_track,
   input  wire  [6:0] track,
   output wire        busy
 );

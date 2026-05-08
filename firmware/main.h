@@ -65,10 +65,10 @@ const struct {
     {"overlay", 6, "Video terminal overlay enable"},
     {"joy_invert", 7, "Invert joystick ports"},
     {"joy_button_space", 8, "Joystick 2nd button maps to Space"},
-    {"joy_emulation_0", 10, "Joystick port 1 keyboard emulation"},
-    {"joy_emulation_1", 11, "Joystick port 2 keyboard emulation"},
-    {"cart_present", 12, "Cartridge present"},
-    {"iec_master_disconnect", 13, "Disconnect C64 from IEC bus"},
+    {"joy_emulation_0", 9, "Joystick port 1 keyboard emulation"},
+    {"joy_emulation_1", 10, "Joystick port 2 keyboard emulation"},
+    {"cart_present", 11, "Cartridge present"},
+    {"iec_master_disconnect", 12, "Disconnect C64 from IEC bus"},
 };
 
 #define FLAG_DEFS_COUNT ((int)(sizeof(flag_defs) / sizeof(flag_defs[0])))

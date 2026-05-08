@@ -34,7 +34,7 @@ module c1541_gcr (
   input  wire        busy,    // drive busy
 
   input  wire        img_mounted,
-  input  wire [15:0] disk_id,
+  input  wire [15:0] img_id,
   input  wire  [6:0] track,
 
   output reg  [12:0] buff_addr,
@@ -179,7 +179,7 @@ always @(posedge clk) begin
   buff_en <= 0;
 
   if (img_mounted)
-    {id2, id1} <= disk_id;
+    {id2, id1} <= img_id;
   else if (track_adj == 18 && buff_en && buff_we) begin
     if (buff_addr == 13'h00A2) id1 <= buff_din;
     if (buff_addr == 13'h00A3) id2 <= buff_din;
