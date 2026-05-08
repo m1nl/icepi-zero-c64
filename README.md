@@ -19,12 +19,25 @@ Hardware used - [IcePi-Zero](https://github.com/cheyao/icepi-zero) FPGA board (L
 ### Why this project?
 
 - **100% open-source toolchain.** Every step of the build — synthesis (Yosys), place-and-route (nextpnr), bitstream packing (Project Trellis), SoC generation (LiteX), CPU core (VexRiscv), and firmware (GCC) — is free and open-source. No vendor IDE, no closed IP cores, no license server. You can rebuild the whole system end-to-end from source on a Linux laptop.
-- **Tiny and portable.** The IcePi-Zero is roughly Raspberry-Pi-Zero-sized and the whole C64 — CPU, VIC-II, two SIDs, two CIAs, a 1541 drive, HDMI output, dual USB HID, and the LiteX/VexRiscv SoC — fits into a single Lattice ECP5U-25F. To the best of the author's knowledge this is the smallest and most portable complete FPGA C64 design currently available.
-- **Battery-friendly.** The board draws around **200 mA** at 5 V during typical emulation, so it runs happily off a small USB power bank or the matching UPS HAT — turning it into a fully portable C64 you can take anywhere.
+- **Tiny and portable.** The IcePi-Zero is roughly Raspberry-Pi-Zero-sized and the whole C64 — CPU, VIC-II, two SIDs, two CIAs, a 1541 drive, HDMI output, dual USB HID, and the LiteX/VexRiscv SoC — fits into a single Lattice ECP5U-25F. To the best of the author's knowledge this is one of the smallest and most portable complete FPGA C64 design currently available (compare it with [C64Nano](https://github.com/MiSTle-Dev/C64Nano)).
+- **Battery-friendly.** The board draws around **150 mA** at 5 V during typical emulation, so it runs happily off a small USB power bank or the matching UPS HAT — turning it into a fully portable C64 you can take anywhere.
 
 [Watch popular C64 demos](https://youtube.com/playlist?list=PLx57TRDm5jOb3XmBs3nD0p_45FGw70Ht1&si=9r16wObv-iXTmFdy) recorded via HDMI grabber connected directly to the board!
 
 ![IcePi-Zero board](doc/board.jpeg)
+
+## USB support
+
+Please keep in mind that the board is FPGA-based, and the USB HID controller is implemented in gateware. There is no dedicated USB controller chip on the board itself. As a result, some USB HID devices may not be compatible with the board.
+
+I have tested the following devices and can confirm they work properly:
+
+- 8BitDo Pro 3 utilizing bundled 2.4G wireless dongle
+- 8BitDo Ultimate 2C wireless utilizing bundled 2.4G wireless dongle (non-Bluetooth version)
+- SpeedLink COMPETITION PRO Extra USB Joystick
+- Logitech Keyboard with Logitech Unifying Receiver
+
+Other USB HID devices should generally work as well. However, avoid combo devices that include built-in USB hub functionality. Each port supports only a single device, as it has a separate USB soft controller attached to it.
 
 ## Building
 
@@ -108,12 +121,12 @@ The following host-keyboard keys are intercepted by the gateware (see `gateware/
 
 | Host key          | Action                                                                  |
 | ----------------- | ----------------------------------------------------------------------- |
-| `Print Screen`    | Toggle the on-screen firmware overlay                                   |
+| `Print Screen`    | Toggle the on-screen firmware overlay (same as serial console)          |
 | `Pause` / `Break` | Reset the C64 CPU                                                       |
-| `F12`             | Trigger cartridge freeze (e.g. Action Replay)                           |
+| `F12`             | Trigger Action Replay cartridge freeze                                  |
 | `Escape`          | Run/Stop + Restore (NMI, via USB HID); also Run/Stop on PS/2            |
 | `Tab`             | Restore (NMI) on USB HID                                                |
-| `Shift` + `-`     | Tape play pulse                                                         |
+| `Shift` + `-`     | Tape play trigger                                                       |
 
 The firmware console also reacts to a few `Alt`+key shortcuts, which toggle and persist runtime flags:
 
