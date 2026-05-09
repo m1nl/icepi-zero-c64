@@ -196,6 +196,12 @@ The `flag <name> [0|1]` command (and the persisted JSON file) operate on the fol
 | `cart_present`          | Indicates that a cartridge is present; ignored if `/c64_roms/ar6_pal.bin` is not present upon reboot          |
 | `iec_master_disconnect` | Disconnects the C64 from the virtual IEC bus.                                                                 |
 
+## Note on AI usage
+
+AI isn’t perfect for Verilog, but it can be useful for design validation. In my experience, I’ve several times simply forgotten to connect a wire, mismatched its width, and a single pass with Claude caught it quickly saving hours of debugging work. It’s also very helpful for instantiating modules and wiring them up in bulk or generating a basic testbench skeleton in Python / Verilator / cocotb. However, when it comes to designing new HDL from scratch, it doesn’t add much value.
+
+Within this project, I’ve used AI more effectively for firmware work, where it helps with writing native C code and documentation (including this file) - especially since I’m not a native speaker. That said, the project wasn’t "vibe coded" in any sense; I can still clearly explain every part of both the HDL and firmware :)
+
 ## Architecture notes
 
 ### 1541 disk sectors via shared BRAM
