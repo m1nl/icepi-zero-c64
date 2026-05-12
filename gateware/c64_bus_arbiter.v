@@ -45,6 +45,7 @@ module c64_bus_arbiter (
   input  wire [5:0]  cpu_pout,
   output reg  [5:0]  cpu_pin,
   input  wire        cpu_we,
+  input  wire        cpu_rdy,
   input  wire [15:0] cpu_pc,
   input wire         cpu_irq,
   input wire         cpu_nmi,
@@ -101,6 +102,16 @@ module c64_bus_arbiter (
   output wire [7:0]  cia2_pa_in,
   input  wire [7:0]  cia2_pa_out,
   input  wire [7:0]  cia2_ddra,
+
+  output reg  [3:0]  reu_addr,
+  output reg  [7:0]  reu_din,
+  input  wire [7:0]  reu_dout,
+  output reg         reu_we,
+  output reg         reu_cen,
+
+  input  wire [15:0] reu_dma_addr,
+  input  wire        reu_dma_active,
+  input  wire        reu_dma_we,
 
   input  wire        cart_present,
   input  wire        cart_game,
@@ -280,11 +291,10 @@ assign cia2_pa_in = {cia2_iec_data_out, cia2_iec_clk_out,
   (~cia2_ddra[5:3] | cia2_pa_out[5:3]), (~cia2_ddra[2:0] | cia2_pa_out[2:0])};
 
 // bus logic
+reg [15:0] bus_addr;
+reg        bus_we;
 
-reg [7:0] vic_last_bus;
-reg [7:0] cpu_last_bus;
 reg [7:0] last_bus;
-
 reg [7:0] bus;
 
 reg io_enable;
@@ -299,6 +309,8 @@ always @(*) begin
     /* no-op */
   end else if (cpu_we && vic_aec)
     bus = cpu_dout;
+  else if (reu_dma_we && reu_dma_active && vic_aec)
+    bus = reu_dout;
   else if (rom_basic_select)
     bus = rom_basic_dout;
   else if (rom_kernal_select)
@@ -322,7 +334,9 @@ always @(*) begin
       bus = cia1_dout;
     else if (!cia2_cen)
       bus = cia2_dout;
-    else if ((!cart_io1_cen || !cart_io2_cen) && cart_present)
+    else if (!reu_cen)
+      bus = reu_dout;
+    else if (!cart_io1_cen || !cart_io2_cen)
       bus = cart_dout;
   end
 end
@@ -334,11 +348,11 @@ assign loram  = cpu_pout[0];
 assign hiram  = cpu_pout[1];
 assign charen = cpu_pout[2];
 
-wire [3:0] cpu_addr_msn;
-wire [3:0] cpu_addr_io;
+wire [3:0] bus_addr_msn;
+wire [3:0] bus_addr_io;
 
-assign cpu_addr_msn = cpu_addr[15:12];
-assign cpu_addr_io  = cpu_addr[11:8];
+assign bus_addr_msn = bus_addr[15:12];
+assign bus_addr_io  = bus_addr[11:8];
 
 assign cart_roml = !roml_select || !cart_present;
 assign cart_romh = !romh_select || !cart_present;
@@ -348,18 +362,31 @@ assign cart_ba = vic_ba && cart_present;
 // address decoding
 
 always @(*) begin
+  if (reu_dma_active && !cpu_we) begin
+    bus_addr = reu_dma_addr;
+    bus_we   = reu_dma_we;
+    ram_din  = reu_dout;
+
+  end else begin
+    bus_addr = cpu_addr;
+    bus_we   = cpu_we;
+    ram_din  = cpu_dout;
+  end
+
   cpu_din  = bus;
   vic_dbi  = bus;
   vic_dbh  = bus[3:0];
   sid_din  = cpu_dout;  // only CPU writes to SID, helps with timing
   cia1_din = cpu_dout;  // only CPU writes to CIA, helps with timing
   cia2_din = cpu_dout;  // only CPU writes to CIA, helps with timing
+  reu_din  = bus;
   cart_din = bus;
 
-  vic_adi   = cpu_addr[5:0];
-  sid_addr  = cpu_addr[8:0];
-  cia1_addr = cpu_addr[3:0];
-  cia2_addr = cpu_addr[3:0];
+  vic_adi   = bus_addr[5:0];
+  sid_addr  = bus_addr[8:0];
+  cia1_addr = bus_addr[3:0];
+  cia2_addr = bus_addr[3:0];
+  reu_addr  = bus_addr[3:0];
 
   io_enable = 1'b0;
 
@@ -367,24 +394,25 @@ always @(*) begin
   sid_we  = 1'b0;
   cia1_we = 1'b0;
   cia2_we = 1'b0;
+  reu_we  = 1'b0;
 
   vic_cen  = 1'b1;
   sid_cen  = 1'b1;
   cia1_cen = 1'b1;
   cia2_cen = 1'b1;
+  reu_cen  = 1'b1;
 
   cart_io1_cen = 1'b1;
   cart_io2_cen = 1'b1;
 
   ram_color_din = bus[3:0];
-  ram_din       = cpu_dout;  // only CPU writes to RAM, helps with timing
 
-  rom_basic_addr  = cpu_addr[12:0];
-  rom_kernal_addr = cpu_addr[12:0];
-  rom_char_addr   = cpu_addr[11:0];
-  ram_color_addr  = cpu_addr[9:0];
-  ram_addr        = cpu_addr;
-  cart_addr       = cpu_addr;
+  rom_basic_addr  = bus_addr[12:0];
+  rom_kernal_addr = bus_addr[12:0];
+  rom_char_addr   = bus_addr[11:0];
+  ram_color_addr  = bus_addr[9:0];
+  ram_addr        = bus_addr;
+  cart_addr       = bus_addr;
 
   ram_color_we = 1'b0;
   ram_we       = 1'b0;
@@ -403,39 +431,42 @@ always @(*) begin
 
   if (cpu_reset || vic_reset) begin
     /* no-op */
+  end else if (!vic_write_ab && !cpu_we && !reu_dma_active && !vic_ba) begin
+    /* no-op */
   end else if (!vic_write_ab) begin
-    vic_we  = cpu_we;
-    sid_we  = cpu_we;
-    cia1_we = cpu_we;
-    cia2_we = cpu_we;
+    vic_we  = bus_we;
+    sid_we  = bus_we;
+    cia1_we = bus_we;
+    cia2_we = bus_we;
+    reu_we  = bus_we;
 
-    ram_color_we = !vic_cas && cpu_we;  // mimic real PLA behaviour
-    ram_we       = cpu_we;
-    cart_we      = cpu_we && cart_present;
+    ram_color_we = !vic_cas && bus_we;  // mimic real PLA behaviour
+    ram_we       = bus_we;
+    cart_we      = bus_we && cart_present;
 
     casez ({game, exrom, charen, hiram, loram})
       5'b10111,  /* fall-through */
       5'b11111,  /* fall-through */
       5'b00111: begin
-        if (cpu_we) begin
-          if (cpu_addr_msn == 4'hd) begin
+        if (bus_we) begin
+          if (bus_addr_msn == 4'hd) begin
             io_enable = 1'b1;
           end else begin
             ram_select = 1'b1;
           end
-        end else if (cpu_addr_msn == 4'hf || cpu_addr_msn == 4'he) begin
+        end else if (bus_addr_msn == 4'hf || bus_addr_msn == 4'he) begin
           rom_kernal_select = 1'b1;
-        end else if (cpu_addr_msn == 4'hd) begin
+        end else if (bus_addr_msn == 4'hd) begin
           if (vic_ba) begin
             io_enable = 1'b1;
           end else begin
             ram_select = 1'b1;
           end
-        end else if ((cpu_addr_msn == 4'hb || cpu_addr_msn == 4'ha) && game) begin
+        end else if ((bus_addr_msn == 4'hb || bus_addr_msn == 4'ha) && game) begin
           rom_basic_select = 1'b1;
-        end else if ((cpu_addr_msn == 4'hb || cpu_addr_msn == 4'ha) && !game) begin
+        end else if ((bus_addr_msn == 4'hb || bus_addr_msn == 4'ha) && !game) begin
           romh_select = 1'b1;
-        end else if ((cpu_addr_msn == 4'h9 || cpu_addr_msn == 4'h8) && !exrom) begin
+        end else if ((bus_addr_msn == 4'h9 || bus_addr_msn == 4'h8) && !exrom) begin
           roml_select = 1'b1;
         end else begin
           ram_select = 1'b1;
@@ -444,51 +475,51 @@ always @(*) begin
       5'b10011,  /* fall-through */
       5'b11011,  /* fall-through */
       5'b00011: begin
-        if (cpu_we) begin
+        if (bus_we) begin
           ram_select = 1'b1;
-        end else if (cpu_addr_msn == 4'hf || cpu_addr_msn == 4'he) begin
+        end else if (bus_addr_msn == 4'hf || bus_addr_msn == 4'he) begin
           rom_kernal_select = 1'b1;
-        end else if (cpu_addr_msn == 4'hd) begin
+        end else if (bus_addr_msn == 4'hd) begin
           rom_char_select = 1'b1;
-        end else if ((cpu_addr_msn == 4'hb || cpu_addr_msn == 4'ha) && game) begin
+        end else if ((bus_addr_msn == 4'hb || bus_addr_msn == 4'ha) && game) begin
           rom_basic_select = 1'b1;
-        end else if ((cpu_addr_msn == 4'hb || cpu_addr_msn == 4'ha) && !game) begin
+        end else if ((bus_addr_msn == 4'hb || bus_addr_msn == 4'ha) && !game) begin
           romh_select = 1'b1;
-        end else if ((cpu_addr_msn == 4'h9 || cpu_addr_msn == 4'h8) && !exrom) begin
+        end else if ((bus_addr_msn == 4'h9 || bus_addr_msn == 4'h8) && !exrom) begin
           roml_select = 1'b1;
         end else begin
           ram_select = 1'b1;
         end
       end
       5'b00110: begin
-        if (cpu_we) begin
-          if (cpu_addr_msn == 4'hd) begin
+        if (bus_we) begin
+          if (bus_addr_msn == 4'hd) begin
             io_enable = 1'b1;
           end else begin
             ram_select = 1'b1;
           end
-        end else if (cpu_addr_msn == 4'hf || cpu_addr_msn == 4'he) begin
+        end else if (bus_addr_msn == 4'hf || bus_addr_msn == 4'he) begin
           rom_kernal_select = 1'b1;
-        end else if (cpu_addr_msn == 4'hd) begin
+        end else if (bus_addr_msn == 4'hd) begin
           if (vic_ba) begin
             io_enable = 1'b1;
           end else begin
             ram_select = 1'b1;
           end
-        end else if (cpu_addr_msn == 4'hb || cpu_addr_msn == 4'ha) begin
+        end else if (bus_addr_msn == 4'hb || bus_addr_msn == 4'ha) begin
           romh_select = 1'b1;
         end else begin
           ram_select = 1'b1;
         end
       end
       5'b00010: begin
-        if (cpu_we) begin
+        if (bus_we) begin
           ram_select = 1'b1;
-        end else if (cpu_addr_msn == 4'hf || cpu_addr_msn == 4'he) begin
+        end else if (bus_addr_msn == 4'hf || bus_addr_msn == 4'he) begin
           rom_kernal_select = 1'b1;
-        end else if (cpu_addr_msn == 4'hd) begin
+        end else if (bus_addr_msn == 4'hd) begin
           rom_char_select = 1'b1;
-        end else if (cpu_addr_msn == 4'hb || cpu_addr_msn == 4'ha) begin
+        end else if (bus_addr_msn == 4'hb || bus_addr_msn == 4'ha) begin
           romh_select = 1'b1;
         end else begin
           ram_select = 1'b1;
@@ -496,13 +527,13 @@ always @(*) begin
       end
       5'b1z101,  /* fall-through */
       5'b00101: begin
-        if (cpu_we) begin
-          if (cpu_addr_msn == 4'hd) begin
+        if (bus_we) begin
+          if (bus_addr_msn == 4'hd) begin
             io_enable = 1'b1;
           end else begin
             ram_select = 1'b1;
           end
-        end else if (cpu_addr_msn == 4'hd) begin
+        end else if (bus_addr_msn == 4'hd) begin
           if (vic_ba) begin
             io_enable = 1'b1;
           end else begin
@@ -513,24 +544,24 @@ always @(*) begin
         end
       end
       5'b1z001: begin
-        if (cpu_we) begin
+        if (bus_we) begin
           ram_select = 1'b1;
-        end else if (cpu_addr_msn == 4'hd) begin
+        end else if (bus_addr_msn == 4'hd) begin
           rom_char_select = 1'b1;
         end else begin
           ram_select = 1'b1;
         end
       end
       5'b1z110: begin
-        if (cpu_we) begin
-          if (cpu_addr_msn == 4'hd) begin
+        if (bus_we) begin
+          if (bus_addr_msn == 4'hd) begin
             io_enable = 1'b1;
           end else begin
             ram_select = 1'b1;
           end
-        end else if (cpu_addr_msn == 4'hf || cpu_addr_msn == 4'he) begin
+        end else if (bus_addr_msn == 4'hf || bus_addr_msn == 4'he) begin
           rom_kernal_select = 1'b1;
-        end else if (cpu_addr_msn == 4'hd) begin
+        end else if (bus_addr_msn == 4'hd) begin
           if (vic_ba) begin
             io_enable = 1'b1;
           end else begin
@@ -541,11 +572,11 @@ always @(*) begin
         end
       end
       5'b1z010: begin
-        if (cpu_we) begin
+        if (bus_we) begin
           ram_select = 1'b1;
-        end else if (cpu_addr_msn == 4'hf || cpu_addr_msn == 4'he) begin
+        end else if (bus_addr_msn == 4'hf || bus_addr_msn == 4'he) begin
           rom_kernal_select = 1'b1;
-        end else if (cpu_addr_msn == 4'hd) begin
+        end else if (bus_addr_msn == 4'hd) begin
           rom_char_select = 1'b1;
         end else begin
           ram_select = 1'b1;
@@ -557,27 +588,27 @@ always @(*) begin
         ram_select = 1'b1;
       end
       5'b01zzz: begin
-        if (cpu_we) begin
-          if (cpu_addr_msn == 4'hf || cpu_addr_msn == 4'he) begin
+        if (bus_we) begin
+          if (bus_addr_msn == 4'hf || bus_addr_msn == 4'he) begin
             romh_select = 1'b1;
-          end else if (cpu_addr_msn == 4'hd) begin
+          end else if (bus_addr_msn == 4'hd) begin
             io_enable = 1'b1;
-          end else if (cpu_addr_msn == 4'h9 || cpu_addr_msn == 4'h8) begin
+          end else if (bus_addr_msn == 4'h9 || bus_addr_msn == 4'h8) begin
             roml_select = 1'b1;
-          end else if (cpu_addr_msn == 4'h0) begin
+          end else if (bus_addr_msn == 4'h0) begin
             ram_select = 1'b1;
           end
-        end else if (cpu_addr_msn == 4'hf || cpu_addr_msn == 4'he) begin
+        end else if (bus_addr_msn == 4'hf || bus_addr_msn == 4'he) begin
           romh_select = 1'b1;
-        end else if (cpu_addr_msn == 4'hd) begin
+        end else if (bus_addr_msn == 4'hd) begin
           if (vic_ba) begin
             io_enable = 1'b1;
           end else begin
             ram_select = 1'b1;
           end
-        end else if (cpu_addr_msn == 4'h9 || cpu_addr_msn == 4'h8) begin
+        end else if (bus_addr_msn == 4'h9 || bus_addr_msn == 4'h8) begin
           roml_select = 1'b1;
-        end else if (cpu_addr_msn == 4'h0) begin
+        end else if (bus_addr_msn == 4'h0) begin
           ram_select = 1'b1;
         end
       end
@@ -587,7 +618,7 @@ always @(*) begin
     endcase
 
     if (io_enable) begin
-      case (cpu_addr_io)
+      case (bus_addr_io)
         4'h0,  /* fall-through */
         4'h1,  /* fall-through */
         4'h2,  /* fall-through */
@@ -617,8 +648,10 @@ always @(*) begin
             cart_io1_cen = 1'b0;
         end
         4'hf: begin
-          if (cart_present)
+          if (cart_present) // && (!game || !exrom))
             cart_io2_cen = 1'b0;
+          else
+            reu_cen = 1'b0;
         end
         default: ;  /* read last bus state */
       endcase

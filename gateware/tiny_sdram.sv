@@ -19,20 +19,23 @@
 // SOFTWARE.
 
 // Modified by m1nl to support variable read / write burst and two ports;
-// P0 has priority over P1; there is no pipelining for reads, and each word
-// is read sequentially - this is a potential room for improvement
+// P0 has priority over P1 and P1 has priority over P2; there is no pipelining
+// for reads, and each word is read sequentially - this is a potential room
+// for improvement
 
 `define CEIL(x) $rtoi($ceil(x))
 `define MAX(x,y) (x > y) ? (x) : (y)
 
 module tiny_sdram #(
-  parameter CLOCK_SPEED   = 100000000,  // Clock speed in Hz
-  parameter CAS_LATENCY   = 2,          // 1, 2, or 3 cycle delays
-  parameter ALLOW_STANDBY = 1,          // 1 to enable standby
+  parameter CLOCK_SPEED      = 100000000,  // Clock speed in Hz
+  parameter CAS_LATENCY      = 2,          // 1, 2, or 3 cycle delays
+  parameter ALLOW_STANDBY    = 1,          // 1 to enable standby
+  parameter MAX_BURST_LENGTH = 2,          // 16 * max burst size
 
   // Port config
   parameter P0_BURST_LENGTH = 1,  // 1, 2, 4, 8 words per read
-  parameter P1_BURST_LENGTH = 2
+  parameter P1_BURST_LENGTH = 1,
+  parameter P2_BURST_LENGTH = 2
 ) (
   input wire clk,
   input wire reset,           // Used to trigger start of FSM
@@ -65,6 +68,20 @@ module tiny_sdram #(
 
   output reg [P1_BURST_LENGTH * 16 - 1:0] p1_rdata,
   output reg                              p1_rdata_valid,
+
+  // Port 2
+  input wire [23 - $clog2(P2_BURST_LENGTH):0] p2_cmd_addr,
+
+  input wire        p2_cmd_we,
+  input wire        p2_cmd_valid,
+  output wire       p2_cmd_ready,
+
+  input wire [P2_BURST_LENGTH * 16 - 1:0] p2_wdata,
+  input wire  [P2_BURST_LENGTH * 2 - 1:0] p2_wdata_we,
+  output reg                              p2_wdata_ready,
+
+  output reg [P2_BURST_LENGTH * 16 - 1:0] p2_rdata,
+  output reg                              p2_rdata_valid,
 
   inout  wire [15:0] SDRAM_DQ,    // Bidirectional data bus
   output reg  [12:0] SDRAM_A,     // Address bus
@@ -179,11 +196,13 @@ module tiny_sdram #(
 
   localparam P0_OUTPUT_WIDTH = P0_BURST_LENGTH * 16;
   localparam P1_OUTPUT_WIDTH = P1_BURST_LENGTH * 16;
+  localparam P2_OUTPUT_WIDTH = P2_BURST_LENGTH * 16;
 
-  localparam OUTPUT_WIDTH = P0_OUTPUT_WIDTH > P1_OUTPUT_WIDTH ? P0_OUTPUT_WIDTH : P1_OUTPUT_WIDTH;
+  localparam OUTPUT_WIDTH = MAX_BURST_LENGTH * 16;
 
   localparam P0_ADDR_LSB = $clog2(P0_BURST_LENGTH);
   localparam P1_ADDR_LSB = $clog2(P1_BURST_LENGTH);
+  localparam P2_ADDR_LSB = $clog2(P2_BURST_LENGTH);
 
   // nCS, nRAS, nCAS, nWE
   typedef enum bit [3:0] {
@@ -225,7 +244,7 @@ module tiny_sdram #(
   // Measures when auto refresh needs to be triggered
   reg [15:0] refresh_counter = 0;
 
-  reg active_port = 0;
+  reg [1:0] active_port = 0;
 
   command sdram_command;
   assign {SDRAM_nCS, SDRAM_nRAS, SDRAM_nCAS, SDRAM_nWE} = sdram_command;
@@ -269,10 +288,29 @@ module tiny_sdram #(
   wire p1_cmd_rd = p1_cmd_pending ? !p1_cmd_we_queue : (p1_cmd_valid && !p1_cmd_we);
 
   ////////////////////////////////////////////////////////////////////////////////////////
+  // Port 2 specifics
+
+  // Cache the signals we received, potentially while busy
+  reg [23:0] p2_cmd_addr_queue = 0;
+
+  reg p2_cmd_we_queue = 0;
+  reg p2_cmd_pending = 0;
+
+  reg     [P2_OUTPUT_WIDTH - 1:0] p2_wdata_queue = 0;
+  reg [P2_BURST_LENGTH * 2 - 1:0] p2_wdata_we_queue = 0;
+
+  // The current p2 address that should be used for any operations on this first cycle only
+  wire [23:0] p2_cmd_addr_current = p2_cmd_pending ? p2_cmd_addr_queue : {p2_cmd_addr, {{P2_ADDR_LSB}{1'b0}}};
+
+  // An active new request or cached request
+  wire p2_cmd_wr = p2_cmd_pending ? p2_cmd_we_queue  : (p2_cmd_valid && p2_cmd_we);
+  wire p2_cmd_rd = p2_cmd_pending ? !p2_cmd_we_queue : (p2_cmd_valid && !p2_cmd_we);
+
+  ////////////////////////////////////////////////////////////////////////////////////////
   // Helpers
 
   // Activates a row
-  task set_active_command(logic port, logic [23:0] addr, state_fsm next_state);
+  task set_active_command(logic [1:0] port, logic [23:0] addr, state_fsm next_state);
     sdram_command <= COMMAND_ACTIVE;
 
     // Set active port
@@ -310,24 +348,30 @@ module tiny_sdram #(
 
   assign p0_cmd_ready = !p0_cmd_pending && init_complete;
   assign p1_cmd_ready = !p1_cmd_pending && init_complete;
+  assign p2_cmd_ready = !p2_cmd_pending && init_complete;
 
-  wire [23:0] cmd_addr_queue = active_port ? p1_cmd_addr_queue : p0_cmd_addr_queue;
+  wire [23:0] cmd_addr_queue = active_port == 0 ? p0_cmd_addr_queue :
+                               active_port == 1 ? p1_cmd_addr_queue :
+                                                  p2_cmd_addr_queue;
 
-  wire [OUTPUT_WIDTH - 1:0] wdata_queue = active_port ?
-    {{(OUTPUT_WIDTH - P1_OUTPUT_WIDTH){1'b0}}, p1_wdata_queue} :
-    {{(OUTPUT_WIDTH - P0_OUTPUT_WIDTH){1'b0}}, p0_wdata_queue};
+  wire [OUTPUT_WIDTH - 1:0] wdata_queue = active_port == 0 ? {{(OUTPUT_WIDTH - P0_OUTPUT_WIDTH){1'b0}}, p0_wdata_queue} :
+                                          active_port == 1 ? {{(OUTPUT_WIDTH - P1_OUTPUT_WIDTH){1'b0}}, p1_wdata_queue} :
+                                                             {{(OUTPUT_WIDTH - P2_OUTPUT_WIDTH){1'b0}}, p2_wdata_queue};
 
-  wire [15:0] wdata_we_queue = active_port ?
-    {{(16 - P1_BURST_LENGTH * 2){1'b0}}, p1_wdata_we_queue} :
-    {{(16 - P0_BURST_LENGTH * 2){1'b0}}, p0_wdata_we_queue};
+  wire [15:0] wdata_we_queue = active_port == 0 ? {{(16 - P0_BURST_LENGTH * 2){1'b0}}, p0_wdata_we_queue} :
+                               active_port == 1 ? {{(16 - P1_BURST_LENGTH * 2){1'b0}}, p1_wdata_we_queue} :
+                                                  {{(16 - P2_BURST_LENGTH * 2){1'b0}}, p2_wdata_we_queue};
 
-  wire [3:0] expected_count = active_port ? P1_BURST_LENGTH : P0_BURST_LENGTH;
+
+  wire [3:0] expected_count = active_port == 0 ? P0_BURST_LENGTH :
+                              active_port == 1 ? P1_BURST_LENGTH :
+                                                 P2_BURST_LENGTH;
 
   ////////////////////////////////////////////////////////////////////////////////////////
   // Process
 
   wire cmd_pending = (refresh_counter >= CYCLES_PER_REFRESH[15:0]) ||
-      p0_cmd_wr || p0_cmd_rd || p1_cmd_wr || p1_cmd_rd;
+      p0_cmd_wr || p0_cmd_rd || p1_cmd_wr || p1_cmd_rd || p2_cmd_wr || p2_cmd_rd;
 
   always_ff @(posedge clk) begin
     if (reset) begin
@@ -346,12 +390,15 @@ module tiny_sdram #(
 
       p0_cmd_pending <= 0;
       p1_cmd_pending <= 0;
+      p2_cmd_pending <= 0;
 
       p0_wdata_ready <= 0;
       p1_wdata_ready <= 0;
+      p2_wdata_ready <= 0;
 
       p0_rdata_valid <= 0;
       p1_rdata_valid <= 0;
+      p2_rdata_valid <= 0;
 
     end else begin
       // Cache port 0 input values
@@ -374,12 +421,25 @@ module tiny_sdram #(
         p1_wdata_we_queue <= p1_wdata_we;
       end
 
+      // Cache port 2 input values
+      if (p2_cmd_valid && p2_cmd_ready) begin
+        p2_cmd_addr_queue <= p2_cmd_addr_current;
+        p2_cmd_we_queue   <= p2_cmd_we;
+        p2_cmd_pending    <= 1'b1;
+
+        p2_wdata_queue    <= p2_wdata;
+        p2_wdata_we_queue <= p2_wdata_we;
+      end
+
       // Ensure pulse
       p0_rdata_valid <= 0;
       p0_wdata_ready <= 0;
 
       p1_rdata_valid <= 0;
       p1_wdata_ready <= 0;
+
+      p2_rdata_valid <= 0;
+      p2_wdata_ready <= 0;
 
       // Default to NOP at all times in between commands
       // NOP
@@ -470,6 +530,12 @@ module tiny_sdram #(
           end else if (p1_cmd_rd) begin
             // Port 1 read
             set_active_command(1, p1_cmd_addr_current, READ);
+          end else if (p2_cmd_wr) begin
+            // Port 1 write
+            set_active_command(2, p2_cmd_addr_current, WRITE);
+          end else if (p2_cmd_rd) begin
+            // Port 1 read
+            set_active_command(2, p2_cmd_addr_current, READ);
           end else if (ALLOW_STANDBY) begin
             state     <= STANDBY;
             SDRAM_CKE <= 0;
@@ -501,6 +567,9 @@ module tiny_sdram #(
             end
             1: begin
               temp = {{(128 - P1_OUTPUT_WIDTH){1'b0}}, p1_wdata_queue};
+            end
+            2: begin
+              temp = {{(128 - P2_OUTPUT_WIDTH){1'b0}}, p2_wdata_queue};
             end
           endcase
 
@@ -551,6 +620,12 @@ module tiny_sdram #(
                 // Clear pending command
                 p1_cmd_pending <= 1'b0;
               end
+              2: begin
+                p2_wdata_ready <= 1;
+
+                // Clear pending command
+                p2_cmd_pending <= 1'b0;
+              end
             endcase
           end
         end
@@ -591,6 +666,10 @@ module tiny_sdram #(
                 // Clear pending command
                 p1_cmd_pending <= 1'b0;
               end
+              2: begin
+                // Clear pending command
+                p2_cmd_pending <= 1'b0;
+              end
             endcase
           end
         end
@@ -606,6 +685,9 @@ module tiny_sdram #(
             end
             1: begin
               temp[P1_OUTPUT_WIDTH - 1:0] = p1_rdata;
+            end
+            2: begin
+              temp[P2_OUTPUT_WIDTH - 1:0] = p2_rdata;
             end
           endcase
 
@@ -631,6 +713,10 @@ module tiny_sdram #(
             1: begin
               p1_rdata       <= temp[P1_OUTPUT_WIDTH - 1:0];
               p1_rdata_valid <= last;
+            end
+            2: begin
+              p2_rdata       <= temp[P2_OUTPUT_WIDTH - 1:0];
+              p2_rdata_valid <= last;
             end
           endcase
         end

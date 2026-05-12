@@ -67,6 +67,8 @@ module usb_hid_host_dual #(
   output wire [7:0] key_1,
   output wire [7:0] key_2,
   output wire [7:0] key_3,
+  output wire [7:0] key_4,
+  output wire [7:0] key_5,
 
   output wire              mouse_report,
   output wire        [2:0] mouse_btn,
@@ -91,6 +93,8 @@ wire [7:0] key_0_i [0:1];
 wire [7:0] key_1_i [0:1];
 wire [7:0] key_2_i [0:1];
 wire [7:0] key_3_i [0:1];
+wire [7:0] key_4_i [0:1];
+wire [7:0] key_5_i [0:1];
 
 wire [2:0] mouse_btn_i [0:1];
 wire [7:0] mouse_dx_i [0:1];
@@ -140,6 +144,8 @@ usb_hid_host #(
   .game_sta(game_sta_i[0]),
   .game_extra(game_extra_i[0]),
   .key_modifiers(key_modifiers_i[0]),
+  .key_5(key_5_i[0]),
+  .key_4(key_4_i[0]),
   .key_3(key_3_i[0]),
   .key_2(key_2_i[0]),
   .key_1(key_1_i[0]),
@@ -182,6 +188,8 @@ usb_hid_host #(
   .game_sta(game_sta_i[1]),
   .game_extra(game_extra_i[1]),
   .key_modifiers(key_modifiers_i[1]),
+  .key_5(key_5_i[1]),
+  .key_4(key_4_i[1]),
   .key_3(key_3_i[1]),
   .key_2(key_2_i[1]),
   .key_1(key_1_i[1]),
@@ -324,17 +332,17 @@ always @(posedge usb_clk)
 
 cdc_handshake #(
   .EXTERNAL_ACK(0),
-  .WIDTH(40)
+  .WIDTH(56)
 ) cdc_handshake_2 (
   .clk_src(usb_clk),
   .rst_src(usb_rst),
   .data_in({key_modifiers_i[key_device_num], key_0_i[key_device_num],
-    key_1_i[key_device_num], key_2_i[key_device_num], key_3_i[key_device_num]}),
+    key_1_i[key_device_num], key_2_i[key_device_num], key_3_i[key_device_num], key_4_i[key_device_num], key_5_i[key_device_num]}),
   .send(key_report_src_send),
   .busy(key_report_busy),
   .clk_dst(clk),
   .rst_dst(reset),
-  .data_out({key_modifiers, key_0, key_1, key_2, key_3}),
+  .data_out({key_modifiers, key_0, key_1, key_2, key_3, key_4, key_5}),
   .valid(key_report),
   .ack_in(1'b0)
 );

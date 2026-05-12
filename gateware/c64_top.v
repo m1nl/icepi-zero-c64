@@ -31,7 +31,7 @@ module c64_top #(
   input wire cpu_reset_req,
   input wire cpu_pause_req,
 
-  // SDRAM port (p0_* interface)
+  // C64 SDRAM port (p0_* interface)
   output  reg [23:0] mem_cmd_addr,
   output  reg        mem_cmd_we,
   output  reg        mem_cmd_valid,
@@ -41,6 +41,17 @@ module c64_top #(
   input  wire        mem_wdata_ready,
   input  wire [15:0] mem_rdata,
   input  wire        mem_rdata_valid,
+
+  // REU SDRAM port (p1_* interface)
+  output  reg [23:0] reu_mem_cmd_addr,
+  output  reg        reu_mem_cmd_we,
+  output  reg        reu_mem_cmd_valid,
+  input  wire        reu_mem_cmd_ready,
+  output  reg [15:0] reu_mem_wdata,
+  output  reg  [1:0] reu_mem_wdata_we,
+  input  wire        reu_mem_wdata_ready,
+  input  wire [15:0] reu_mem_rdata,
+  input  wire        reu_mem_rdata_valid,
 
   // LEDs
   output wire [4:0] leds,
@@ -225,6 +236,8 @@ assign vic_overlay_pixel_valid = overlay_pixel_valid && flags[6];
 // cpu6510_0
 // ---------------------------------------------------------------------------
 
+wire        reu_dma_active;
+
 wire        cpu_reset;
 wire [15:0] cpu_addr;
 wire  [7:0] cpu_din;
@@ -236,6 +249,8 @@ wire [15:0] cpu_pc;
 wire        cpu_irq;
 wire        cpu_nmi;
 wire        cpu_nmi_ack;
+wire        cpu_rdy;
+
 reg         cpu_paused;
 
 cpu6510 #(
@@ -246,7 +261,7 @@ cpu6510 #(
   .clk_phi (vic_clk_phi),
   .phi2_l  (vic_phi2_l),
   .phi2_n  (vic_phi2_n && !vic_stall),
-  .rdy     (vic_ba && !cpu_paused),
+  .rdy     (cpu_rdy),
   .irq     (cpu_irq),
   .nmi     (cpu_nmi),
   .nmi_ack (cpu_nmi_ack),
@@ -258,6 +273,8 @@ cpu6510 #(
   .pout    (cpu_pout),
   .pc      (cpu_pc)
 );
+
+assign cpu_rdy = vic_ba && !cpu_paused && !reu_dma_active;
 
 // ---------------------------------------------------------------------------
 // c64_redip_sid_0
@@ -414,8 +431,12 @@ wire [7:0] hid_key_0;
 wire [7:0] hid_key_1;
 wire [7:0] hid_key_2;
 wire [7:0] hid_key_3;
+wire [7:0] hid_key_4;
+wire [7:0] hid_key_5;
 
-c64_keyboard c64_keyboard_0 (
+c64_keyboard #(
+  .CLK_FREQUENCY(SYS_CLK_FREQUENCY)
+) c64_keyboard_0 (
   .clk                  (clk),
   .reset                (rst || vic_reset_req),
   .enable               (!flags[6] && !hid_key_alt),
@@ -444,6 +465,8 @@ c64_keyboard c64_keyboard_0 (
   .hid_key_1            (hid_key_1),
   .hid_key_2            (hid_key_2),
   .hid_key_3            (hid_key_3),
+  .hid_key_4            (hid_key_4),
+  .hid_key_5            (hid_key_5),
   .ps2_fifo_rd_en       (ps2_fifo_rd_en),
   .ps2_fifo_rd_data     (ps2_fifo_rd_data),
   .ps2_fifo_rd_valid    (ps2_fifo_rd_valid)
@@ -587,6 +610,8 @@ wire [1:0] usb_oe_bus;
 
 wire [1:0] usb_connected;
 
+wire [5:0] hid_key_mask;
+
 assign usb_pullup_dp_0 = 1'b0;
 assign usb_pullup_dn_0 = 1'b0;
 assign usb_pullup_dp_1 = 1'b0;
@@ -640,18 +665,84 @@ usb_hid_host_dual usb_hid_host_dual_0 (
   .key_1         (hid_key_1),
   .key_2         (hid_key_2),
   .key_3         (hid_key_3),
+  .key_4         (hid_key_4),
+  .key_5         (hid_key_5),
   .mouse_report  (),
   .mouse_btn     (),
   .mouse_dx      (),
   .mouse_dy      ()
 );
 
-assign hid_key_report_out = hid_key_report && (flags[6] || hid_key_alt) &&
-  (hid_key_1 == 0 && hid_key_2 == 0 && hid_key_3 == 0);
+assign hid_key_mask = {hid_key_0 != 0, hid_key_1 != 0, hid_key_2 != 0, hid_key_3 != 0, hid_key_4 != 0, hid_key_5 != 0};
+
+assign hid_key_report_out = hid_key_report && (flags[6] || hid_key_alt) && ((hid_key_mask & (hid_key_mask - {5'b0, 1'b1})) == 0);
 
 assign hid_key_modifiers_out = hid_key_modifiers;
 assign hid_key_alt           = |(hid_key_modifiers & 8'h44);
-assign hid_key_0_out         = hid_key_0;
+assign hid_key_0_out         = hid_key_0 | hid_key_1 | hid_key_2 | hid_key_3 | hid_key_4 | hid_key_5;
+
+// ---------------------------------------------------------------------------
+// c64_reu_0
+// ---------------------------------------------------------------------------
+
+wire [3:0] reu_addr;
+wire [7:0] reu_din;
+wire [7:0] reu_dout;
+wire       reu_we;
+wire       reu_cen;
+wire       reu_irq;
+
+wire [15:0] reu_dma_addr;
+wire        reu_dma_we;
+
+reg  [21:0] reu_mem_addr;
+reg   [7:0] reu_mem_din;
+reg   [7:0] reu_mem_dout;
+
+wire        reu_mem_we;
+wire        reu_mem_valid;
+wire        reu_mem_ready;
+wire        reu_mem_rvalid;
+
+c64_reu c64_reu_0 (
+  .clk              (clk),
+  .rst              (cpu_reset),
+  .phi2_p           (vic_phi2_p && !vic_stall),
+  .phi2_h           (vic_phi2_h),
+  .phi2_n           (vic_phi2_n && !vic_stall),
+  .phi2_l           (vic_phi2_l),
+  .vic_ba           (vic_ba),
+  .reu_addr         (reu_addr),
+  .reu_din          (reu_din),
+  .reu_dout         (reu_dout),
+  .reu_we           (reu_we),
+  .reu_cen          (reu_cen),
+  .reu_dma_addr     (reu_dma_addr),
+  .reu_dma_we       (reu_dma_we),
+  .reu_dma_active   (reu_dma_active),
+  .reu_mem_addr     (reu_mem_addr),
+  .reu_mem_din      (reu_mem_din),
+  .reu_mem_dout     (reu_mem_dout),
+  .reu_mem_we       (reu_mem_we),
+  .reu_mem_valid    (reu_mem_valid),
+  .reu_mem_ready    (reu_mem_ready),
+  .reu_mem_rvalid   (reu_mem_rvalid),
+  .ff00_trigger     (cpu_addr == 16'hff00),
+  .irq              (reu_irq)
+);
+
+always @(*) begin
+  reu_mem_cmd_addr  = {SDRAM_BANK, 1'b1, reu_mem_addr[21:1]};
+  reu_mem_cmd_we    = reu_mem_we;
+  reu_mem_cmd_valid = reu_mem_valid;
+
+  reu_mem_wdata     = {reu_mem_din, reu_mem_din};
+  reu_mem_wdata_we  = reu_mem_addr[0] ? 2'b10 : 2'b01;
+  reu_mem_rvalid    = reu_mem_rdata_valid;
+
+  reu_mem_dout      = reu_mem_addr[0] ? reu_mem_rdata[15:8] : reu_mem_rdata[7:0];
+  reu_mem_ready     = reu_mem_cmd_ready;
+end
 
 // ---------------------------------------------------------------------------
 // c64_action_replay_0
@@ -781,6 +872,7 @@ c64_bus_arbiter c64_bus_arbiter_0 (
   .cpu_pout  (cpu_pout),
   .cpu_pin   (cpu_pin),
   .cpu_we    (cpu_we),
+  .cpu_rdy   (cpu_rdy),
   .cpu_pc    (cpu_pc),
   .cpu_irq   (cpu_irq),
   .cpu_nmi   (cpu_nmi),
@@ -837,6 +929,16 @@ c64_bus_arbiter c64_bus_arbiter_0 (
   .cia2_pa_in  (cia2_pa_in),
   .cia2_pa_out (cia2_pa_out),
   .cia2_ddra   (cia2_ddra),
+
+  .reu_addr (reu_addr),
+  .reu_din  (reu_din),
+  .reu_dout (reu_dout),
+  .reu_we   (reu_we),
+  .reu_cen  (reu_cen),
+
+  .reu_dma_addr   (reu_dma_addr),
+  .reu_dma_we     (reu_dma_we),
+  .reu_dma_active (reu_dma_active),
 
   .cart_present (cart_present),
   .cart_game    (cart_game),
@@ -932,7 +1034,7 @@ assign cpu_reset = cpu_reset_i || vic_cpu_reset || rst;
 // IRQ / NMI logic
 // ---------------------------------------------------------------------------
 
-assign cpu_irq = cia1_irq | vic_irq | (ar_irq && cart_present);
+assign cpu_irq = cia1_irq | vic_irq | reu_irq | (ar_irq && cart_present);
 assign cpu_nmi = cia2_irq | kbd_restore_toggle | (ar_nmi && cart_present);
 
 // ---------------------------------------------------------------------------
@@ -990,7 +1092,7 @@ always @(*) begin
     rom_ar_ready  = mem_cmd_ready;
   end
 
-  mem_cmd_addr = {SDRAM_BANK, 4'b0, mem_addr[18:1]};
+  mem_cmd_addr = {SDRAM_BANK, 4'b0000, mem_addr[18:1]};
 
   ram_dout        = mem_raddr_lsb ? mem_rdata[15:8] : mem_rdata[7:0];
   rom_char_dout   = mem_raddr_lsb ? mem_rdata[15:8] : mem_rdata[7:0];
@@ -1034,9 +1136,10 @@ always @(posedge clk) begin
     led_dim_counter <= led_dim_counter + 1;
     leds_r          <= 5'b0;
 
-    if (led_dim_counter == 0)
-      leds_r <= {usb_connected[0] || usb_connected[1], tape_act,
-        c1541_led, vic_stall || cpu_paused, !cpu_reset && !vic_reset_req};
+    if (led_dim_counter == 0) begin
+      leds_r <= {usb_connected[0] || usb_connected[1], tape_act, c1541_led,
+        cpu_paused || reu_dma_active, !cpu_reset && !vic_reset_req};
+    end
   end
 end
 

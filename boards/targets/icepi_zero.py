@@ -8,6 +8,7 @@
 
 # Adapted and modified for Icepi Zero C64 project by m1nl
 
+from boards.platforms import icepi_zero
 from litex.build.io import DDROutput
 from litex.gen import *
 from litex.soc.cores.bitbang import I2CMaster
@@ -19,7 +20,6 @@ from litex.soc.integration.soc_core import *
 from litex.soc.interconnect import stream, wishbone
 from migen import *
 
-from boards.platforms import icepi_zero
 from gateware.c64_top import C64Top
 from gateware.tiny_sdram import TinySDRAM, TinySDRAMWishboneAdapter
 from gateware.video_terminal_overlay import VideoTerminalOverlay
@@ -113,7 +113,8 @@ class BaseSoC(SoCCore):
             platform,
             platform.request("sdram"),
             p0_burst_length=1,
-            p1_burst_length=2,
+            p1_burst_length=1,
+            p2_burst_length=2,
             clk_domain="sys3x" if sdram_rate == "1:3" else "sys",
             clk_freq=sys_clk_freq * (3 if sdram_rate == "1:3" else 1),
         )
@@ -126,7 +127,7 @@ class BaseSoC(SoCCore):
         )
         self.bus.add_slave(name="main_ram", slave=sdram_wb)
         self.sdram_wb_bridge = TinySDRAMWishboneAdapter(
-            wishbone=sdram_wb, port=self.tiny_sdram.p1, base_address=self.bus.regions["main_ram"].origin
+            wishbone=sdram_wb, port=self.tiny_sdram.p2, base_address=self.bus.regions["main_ram"].origin
         )
 
         # SPI Flash --------------------------------------------------------------------------------
@@ -230,7 +231,8 @@ class BaseSoC(SoCCore):
         # C64 Top ----------------------------------------------------------------------------------
         self.c64_top = C64Top(
             platform,
-            sdram_port=self.tiny_sdram.p0,  # p0 has priority over p1
+            c64_ram_port=self.tiny_sdram.p0,  # p0 has priority over p1
+            reu_ram_port=self.tiny_sdram.p1,  # p1 has priority over p2
             drive_shmem=self.drive_shmem_port,
             drive_rom=self.drive_rom_port,
             leds=platform.request_all("user_led"),

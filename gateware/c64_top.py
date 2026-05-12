@@ -69,7 +69,8 @@ class C64Top(Module):
     def __init__(
         self,
         platform,
-        sdram_port,
+        c64_ram_port,
+        reu_ram_port,
         drive_rom,
         drive_shmem,
         leds,
@@ -117,7 +118,7 @@ class C64Top(Module):
         self.comb += self.control.ev.tape_stop.trigger.eq(tape_cass_sense_n & ~tape_cass_sense_n_d)
 
         rst = Signal()
-        self.comb += rst.eq(ResetSignal(clk_domain) | ~sdram_port.init_complete)
+        self.comb += rst.eq(ResetSignal(clk_domain) | ~c64_ram_port.init_complete)
 
         vic_reset_req = self.control.vic_reset_req.storage
         cpu_reset_req = self.control.cpu_reset_req.storage
@@ -201,16 +202,26 @@ class C64Top(Module):
             i_vic_reset_req=vic_reset_req,
             i_cpu_reset_req=cpu_reset_req,
             i_cpu_pause_req=cpu_pause_req,
-            # SDRAM port
-            o_mem_cmd_addr=sdram_port.cmd_addr,
-            o_mem_cmd_we=sdram_port.cmd_we,
-            o_mem_cmd_valid=sdram_port.cmd_valid,
-            i_mem_cmd_ready=sdram_port.cmd_ready,
-            o_mem_wdata=sdram_port.wdata,
-            o_mem_wdata_we=sdram_port.wdata_we,
-            i_mem_wdata_ready=sdram_port.wdata_ready,
-            i_mem_rdata=sdram_port.rdata,
-            i_mem_rdata_valid=sdram_port.rdata_valid,
+            # C64 SDRAM port
+            o_mem_cmd_addr=c64_ram_port.cmd_addr,
+            o_mem_cmd_we=c64_ram_port.cmd_we,
+            o_mem_cmd_valid=c64_ram_port.cmd_valid,
+            i_mem_cmd_ready=c64_ram_port.cmd_ready,
+            o_mem_wdata=c64_ram_port.wdata,
+            o_mem_wdata_we=c64_ram_port.wdata_we,
+            i_mem_wdata_ready=c64_ram_port.wdata_ready,
+            i_mem_rdata=c64_ram_port.rdata,
+            i_mem_rdata_valid=c64_ram_port.rdata_valid,
+            # REU SDRAM port
+            o_reu_mem_cmd_addr=reu_ram_port.cmd_addr,
+            o_reu_mem_cmd_we=reu_ram_port.cmd_we,
+            o_reu_mem_cmd_valid=reu_ram_port.cmd_valid,
+            i_reu_mem_cmd_ready=reu_ram_port.cmd_ready,
+            o_reu_mem_wdata=reu_ram_port.wdata,
+            o_reu_mem_wdata_we=reu_ram_port.wdata_we,
+            i_reu_mem_wdata_ready=reu_ram_port.wdata_ready,
+            i_reu_mem_rdata=reu_ram_port.rdata,
+            i_reu_mem_rdata_valid=reu_ram_port.rdata_valid,
             # LEDs
             o_leds=leds,
             # TMDS
@@ -290,6 +301,7 @@ class C64Top(Module):
 
         # Top-level and core C64 modules
         platform.add_source(os.path.join(gateware_dir, "c64_top.v"))
+        platform.add_source(os.path.join(gateware_dir, "c64_reu.v"))
         platform.add_source(os.path.join(gateware_dir, "vicii_kawari.v"))
         platform.add_source(os.path.join(gateware_dir, "cpu6510.v"))
         platform.add_source(os.path.join(gateware_dir, "c64_bus_arbiter.v"))

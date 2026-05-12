@@ -71,6 +71,8 @@ module c64_keyboard #(
   input wire [7:0] hid_key_1,
   input wire [7:0] hid_key_2,
   input wire [7:0] hid_key_3,
+  input wire [7:0] hid_key_4,
+  input wire [7:0] hid_key_5,
 
   output wire       ps2_fifo_rd_en,
   input  wire [7:0] ps2_fifo_rd_data,
@@ -135,11 +137,8 @@ always @(posedge clk) begin
   end
 end
 
-localparam KEY_SYSRQ = 8'h46;
-
 wire joy_overlay;
-wire key_overlay      = hid_keys[0] == KEY_SYSRQ;
-wire overlay_combined = key_overlay || joy_overlay;
+wire overlay_combined = key_sysrq || joy_overlay;
 
 reg overlay_combined_i;
 
@@ -163,11 +162,8 @@ always @(posedge clk) begin
   end
 end
 
-localparam KEY_PAGE_BREAK = 8'h48;
-
 wire joy_reset;
-wire key_reset = hid_keys[0] == KEY_PAGE_BREAK;
-wire reset_combined = key_reset || joy_reset;
+wire reset_combined = key_pause_break || joy_reset;
 
 reg reset_combined_i;
 
@@ -191,11 +187,7 @@ always @(posedge clk) begin
   end
 end
 
-localparam KEY_F12 = 8'h45;
-
-wire key_freeze = hid_keys[0] == KEY_F12;
-wire freeze_combined = key_freeze;
-
+wire freeze_combined = key_F12;
 reg freeze_combined_i;
 
 always @(posedge clk) begin
@@ -215,35 +207,49 @@ end
 reg ps2_extended;
 reg ps2_pressed = 1'b1;
 
+localparam HID_KEYS_NUM = 6;
+
+localparam HID_STATE_IDLE     = 0;
+localparam HID_STATE_MODIFIER = 1;
+localparam HID_STATE_RELEASE  = 2;
+localparam HID_STATE_PRESS    = 3;
+
 wire hid_pressed;
 wire hid_released;
-wire hid_changed;
 
 wire [7:0] hid_key;
-wire [7:0] hid_keys [0:3];
+wire       hid_value;
+wire [7:0] hid_keys [0:HID_KEYS_NUM - 1];
 
 reg [7:0] hid_key_modifiers_i;
-reg [7:0] hid_keys_i [0:3];
-reg [1:0] hid_counter = 3;
-reg       hid_enable;
+reg [7:0] hid_keys_i [0:HID_KEYS_NUM - 1];
 
+reg [2:0] hid_counter;
+reg [1:0] hid_state;
+reg       hid_trigger;
+
+// modify below when HID_KEYS_NUM is changed
 assign hid_keys[0] = hid_key_0;
 assign hid_keys[1] = hid_key_1;
 assign hid_keys[2] = hid_key_2;
 assign hid_keys[3] = hid_key_3;
+assign hid_keys[4] = hid_key_4;
+assign hid_keys[5] = hid_key_5;
 
+// hid released also includes key change
+assign hid_released = hid_keys_i[hid_counter] != 0 && hid_keys[hid_counter] != hid_keys_i[hid_counter];
 assign hid_pressed  = hid_keys_i[hid_counter] == 0 && hid_keys[hid_counter] != 0;
-assign hid_released = hid_keys_i[hid_counter] != 0 && hid_keys[hid_counter] == 0;
-assign hid_changed  = hid_keys_i[hid_counter] != 0 && hid_keys[hid_counter] != 0 &&
-  hid_keys_i[hid_counter] != hid_keys[hid_counter];
 
-assign hid_key = hid_pressed  ? hid_keys[hid_counter]   :
-                 hid_released ? hid_keys_i[hid_counter] :
-                 hid_changed  ? hid_keys_i[hid_counter] : 0;
+assign hid_key = (hid_released && hid_state == HID_STATE_RELEASE) ? hid_keys_i[hid_counter] :
+                 (hid_pressed  && hid_state == HID_STATE_PRESS)   ? hid_keys[hid_counter]   : 0;
+
+assign hid_value = (hid_state == HID_STATE_PRESS) && enable;  // capture hid keys only when enable is set
 
 reg key_return;
 reg key_space;
 reg key_runstop;
+reg key_pause_break;
+reg key_sysrq;
 
 reg key_left;
 reg key_right;
@@ -269,6 +275,7 @@ reg key_F5;
 reg key_F6;
 reg key_F7;
 reg key_F8;
+reg key_F12;
 
 reg key_Q;
 reg key_W;
@@ -588,7 +595,8 @@ assign pb_in[7] = pb_out_biased[7] &
 
 always @(posedge clk) begin
   if (reset) begin
-    hid_counter <= 3;
+    hid_counter <= 0;
+    hid_state   <= HID_STATE_IDLE;
 
     ps2_extended <= 1'b0;
     ps2_pressed  <= 1'b1;
@@ -596,9 +604,11 @@ always @(posedge clk) begin
     key_restore   <= 1'b0;
     key_tape_play <= 1'b0;
 
-    key_return    <= 1'b0;
-    key_space     <= 1'b0;
-    key_runstop   <= 1'b0;
+    key_return      <= 1'b0;
+    key_space       <= 1'b0;
+    key_runstop     <= 1'b0;
+    key_pause_break <= 1'b0;
+    key_sysrq       <= 1'b0;
 
     key_left      <= 1'b0;
     key_right     <= 1'b0;
@@ -624,6 +634,7 @@ always @(posedge clk) begin
     key_F6        <= 1'b0;
     key_F7        <= 1'b0;
     key_F8        <= 1'b0;
+    key_F12       <= 1'b0;
 
     key_Q         <= 1'b0;
     key_W         <= 1'b0;
@@ -726,6 +737,7 @@ always @(posedge clk) begin
         8'h0B: key_F6 <= ps2_pressed;
         8'h83: key_F7 <= ps2_pressed;
         8'h0A: key_F8 <= ps2_pressed;
+        8'h07: key_F12 <= ps2_pressed;
         8'h75: if (ps2_extended) begin
           key_up <= ps2_pressed;
         end
@@ -873,195 +885,225 @@ always @(posedge clk) begin
         default: ;
       endcase
     end
-  end else if (hid_enable) begin
-    hid_key_modifiers_i <= hid_key_modifiers;
+  end else begin
+    case (hid_state)
+      HID_STATE_IDLE: begin
+        hid_counter <= 0;
 
-    if (hid_key_modifiers[0] != hid_key_modifiers_i[0])
-      key_ctrl <= hid_key_modifiers[0];
-
-    if (hid_key_modifiers[4] != hid_key_modifiers_i[4])
-      key_ctrl <= hid_key_modifiers[4];
-
-    if (hid_key_modifiers[1] != hid_key_modifiers_i[1]) begin
-      key_shiftl <= hid_key_modifiers[1];
-
-      if (!hid_key_modifiers[1])
-        key_shift <= 0;
-    end
-
-    if (hid_key_modifiers[5] != hid_key_modifiers_i[5]) begin
-      key_shiftr <= hid_key_modifiers[5];
-
-      if (!hid_key_modifiers[5])
-        key_shift <= 0;
-    end
-
-    if (hid_key_modifiers[2] != hid_key_modifiers_i[2])
-      key_commodore <= hid_key_modifiers[2];
-
-    if (hid_key_modifiers[6] != hid_key_modifiers_i[6])
-      key_commodore <= hid_key_modifiers[2];
-
-    if (hid_key_modifiers_i == hid_key_modifiers) begin
-      if (!hid_changed) begin
-        hid_counter             <= hid_counter - 1;
-        hid_keys_i[hid_counter] <= hid_keys[hid_counter];
-
-      end else begin
-        hid_keys_i[hid_counter] <= 8'h00;
+        if (hid_trigger)
+          hid_state <= HID_STATE_MODIFIER;
       end
+      HID_STATE_MODIFIER: begin
+        hid_key_modifiers_i <= hid_key_modifiers;
 
-      case (hid_key)
-        8'h04: begin key_A <= hid_pressed; key_shift <= mod_shift; end
-        8'h05: begin key_B <= hid_pressed; key_shift <= mod_shift; end
-        8'h06: begin key_C <= hid_pressed; key_shift <= mod_shift; end
-        8'h07: begin key_D <= hid_pressed; key_shift <= mod_shift; end
-        8'h08: begin key_E <= hid_pressed; key_shift <= mod_shift; end
-        8'h09: begin key_F <= hid_pressed; key_shift <= mod_shift; end
-        8'h0A: begin key_G <= hid_pressed; key_shift <= mod_shift; end
-        8'h0B: begin key_H <= hid_pressed; key_shift <= mod_shift; end
-        8'h0C: begin key_I <= hid_pressed; key_shift <= mod_shift; end
-        8'h0D: begin key_J <= hid_pressed; key_shift <= mod_shift; end
-        8'h0E: begin key_K <= hid_pressed; key_shift <= mod_shift; end
-        8'h0F: begin key_L <= hid_pressed; key_shift <= mod_shift; end
-        8'h10: begin key_M <= hid_pressed; key_shift <= mod_shift; end
-        8'h11: begin key_N <= hid_pressed; key_shift <= mod_shift; end
-        8'h12: begin key_O <= hid_pressed; key_shift <= mod_shift; end
-        8'h13: begin key_P <= hid_pressed; key_shift <= mod_shift; end
-        8'h14: begin key_Q <= hid_pressed; key_shift <= mod_shift; end
-        8'h15: begin key_R <= hid_pressed; key_shift <= mod_shift; end
-        8'h16: begin key_S <= hid_pressed; key_shift <= mod_shift; end
-        8'h17: begin key_T <= hid_pressed; key_shift <= mod_shift; end
-        8'h18: begin key_U <= hid_pressed; key_shift <= mod_shift; end
-        8'h19: begin key_V <= hid_pressed; key_shift <= mod_shift; end
-        8'h1A: begin key_W <= hid_pressed; key_shift <= mod_shift; end
-        8'h1B: begin key_X <= hid_pressed; key_shift <= mod_shift; end
-        8'h1C: begin key_Y <= hid_pressed; key_shift <= mod_shift; end
-        8'h1D: begin key_Z <= hid_pressed; key_shift <= mod_shift; end
-        8'h1E: begin
-          key_1 <= hid_pressed & ~mod_shift;
-          key_exclamation <= hid_pressed & mod_shift;
+        if (hid_key_modifiers[0] != hid_key_modifiers_i[0])
+          key_ctrl <= hid_key_modifiers[0];
+
+        if (hid_key_modifiers[4] != hid_key_modifiers_i[4])
+          key_ctrl <= hid_key_modifiers[4];
+
+        if (hid_key_modifiers[1] != hid_key_modifiers_i[1]) begin
+          key_shiftl <= hid_key_modifiers[1];
+
+          if (!hid_key_modifiers[1])
+            key_shift <= 0;
         end
-        8'h1F: begin
-          key_2 <= hid_pressed & ~mod_shift;
-          key_at <= hid_pressed & mod_shift;
+
+        if (hid_key_modifiers[5] != hid_key_modifiers_i[5]) begin
+          key_shiftr <= hid_key_modifiers[5];
+
+          if (!hid_key_modifiers[5])
+            key_shift <= 0;
         end
-        8'h20: begin
-          key_3 <= hid_pressed & ~mod_shift;
-          key_hash <= hid_pressed & mod_shift;
+
+        if (hid_key_modifiers[2] != hid_key_modifiers_i[2])
+          key_commodore <= hid_key_modifiers[2];
+
+        if (hid_key_modifiers[6] != hid_key_modifiers_i[6])
+          key_commodore <= hid_key_modifiers[2];
+
+        hid_state <= HID_STATE_RELEASE;
+      end
+      HID_STATE_RELEASE: begin
+        hid_counter <= hid_counter + 1;
+
+        if (hid_counter == (HID_KEYS_NUM - 1)) begin
+          hid_counter <= 0;
+          hid_state   <= HID_STATE_PRESS;
         end
-        8'h21: begin
-          key_4 <= hid_pressed & ~mod_shift;
-          key_dollar <= hid_pressed & mod_shift;
+
+        if (hid_released)
+          hid_keys_i[hid_counter] <= 0;
+      end
+      HID_STATE_PRESS: begin
+        hid_counter <= hid_counter + 1;
+
+        if (hid_counter == (HID_KEYS_NUM - 1)) begin
+          hid_counter <= 0;
+          hid_state   <= HID_STATE_IDLE;
         end
-        8'h22: begin
-          key_5 <= hid_pressed & ~mod_shift;
-          key_percent <= hid_pressed & mod_shift;
-        end
-        8'h23: begin
-          key_6 <= hid_pressed & ~mod_shift;
-          key_arrow_up <= hid_pressed & mod_shift;
-        end
-        8'h24: begin
-          key_7 <= hid_pressed & ~mod_shift;
-          key_and <= hid_pressed & mod_shift;
-        end
-        8'h25: begin
-          key_8 <= hid_pressed & ~mod_shift;
-          key_star <= hid_pressed & mod_shift;
-        end
-        8'h26: begin
-          key_9 <= hid_pressed & ~mod_shift;
-          key_parenthesis_left <= hid_pressed & mod_shift;
-        end
-        8'h27: begin
-          key_0 <= hid_pressed & ~mod_shift;
-          key_parenthesis_right <= hid_pressed & mod_shift;
-        end
-        8'h28, 8'h58: begin key_return <= hid_pressed; key_shift <= mod_shift; end
-        8'h29: begin
-          key_runstop <= hid_pressed;
-          key_restore <= hid_pressed;
-        end
-        8'h2A: begin key_del <= hid_pressed; key_shift <= mod_shift; end
-        8'h2B: begin key_restore <= hid_pressed; key_shift <= mod_shift; end
-        8'h2C: begin key_space <= hid_pressed; key_shift <= mod_shift; end
-        8'h2D: begin
-          key_minus <= hid_pressed & ~mod_shift;
-          key_tape_play <= hid_pressed & mod_shift;
-        end
-        8'h2E: begin
-          key_equal <= hid_pressed & ~mod_shift;
-          key_plus <= hid_pressed & mod_shift;
-        end
-        8'h2F: begin
-          key_bracket_left <= hid_pressed & ~mod_shift;
-          key_arrow_left <= hid_pressed & mod_shift;
-        end
-        8'h30: begin
-          key_bracket_right <= hid_pressed & ~mod_shift;
-          key_F1 <= hid_pressed & mod_shift;
-        end
-        8'h32: begin
-          key_runstop <= hid_pressed;
-          key_shift <= mod_shift;
-          key_tape_play <= hid_pressed & mod_shift;
-        end
-        8'h33: begin
-          key_colon <= hid_pressed & mod_shift;
-          key_semicolon <= hid_pressed & ~mod_shift;
-        end
-        8'h34: begin
-          key_pound <= hid_pressed & ~mod_shift;
-          key_quote <= hid_pressed & mod_shift;
-        end
-        8'h35: begin key_runstop <= hid_pressed; key_shift <= mod_shift; end
-        8'h36: begin
-          key_comma <= hid_pressed & ~mod_shift;
-          key_angle_left <= hid_pressed & mod_shift;
-        end
-        8'h37: begin
-          key_dot <= hid_pressed & ~mod_shift;
-          key_angle_right <= hid_pressed & mod_shift;
-        end
-        8'h38: begin
-          key_slash <= hid_pressed & ~mod_shift;
-          key_question <= hid_pressed & mod_shift;
-        end
-        8'h39: key_caps <= hid_pressed;
-        8'h3A: key_F1 <= hid_pressed;
-        8'h3B: key_F2 <= hid_pressed;
-        8'h3C: key_F3 <= hid_pressed;
-        8'h3D: key_F4 <= hid_pressed;
-        8'h3E: key_F5 <= hid_pressed;
-        8'h3F: key_F6 <= hid_pressed;
-        8'h40: key_F7 <= hid_pressed;
-        8'h41: key_F8 <= hid_pressed;
-        8'h49: key_ins <= hid_pressed;
-        8'h4A: begin
-          key_home <= hid_pressed & ~mod_shift;
-          key_cls <= hid_pressed & mod_shift;
-        end
-        8'h4C: key_del <= hid_pressed;
-        8'h4F: key_right <= hid_pressed;
-        8'h50: key_left <= hid_pressed;
-        8'h51: key_down <= hid_pressed;
-        8'h52: key_up <= hid_pressed;
-        default: ;
-      endcase
+
+        if (hid_pressed)
+          hid_keys_i[hid_counter] <= hid_keys[hid_counter];
+      end
+      default: hid_state <= HID_STATE_IDLE;
+    endcase
+
+    case (hid_key)
+      8'h04: begin key_A <= hid_value; key_shift <= mod_shift; end
+      8'h05: begin key_B <= hid_value; key_shift <= mod_shift; end
+      8'h06: begin key_C <= hid_value; key_shift <= mod_shift; end
+      8'h07: begin key_D <= hid_value; key_shift <= mod_shift; end
+      8'h08: begin key_E <= hid_value; key_shift <= mod_shift; end
+      8'h09: begin key_F <= hid_value; key_shift <= mod_shift; end
+      8'h0A: begin key_G <= hid_value; key_shift <= mod_shift; end
+      8'h0B: begin key_H <= hid_value; key_shift <= mod_shift; end
+      8'h0C: begin key_I <= hid_value; key_shift <= mod_shift; end
+      8'h0D: begin key_J <= hid_value; key_shift <= mod_shift; end
+      8'h0E: begin key_K <= hid_value; key_shift <= mod_shift; end
+      8'h0F: begin key_L <= hid_value; key_shift <= mod_shift; end
+      8'h10: begin key_M <= hid_value; key_shift <= mod_shift; end
+      8'h11: begin key_N <= hid_value; key_shift <= mod_shift; end
+      8'h12: begin key_O <= hid_value; key_shift <= mod_shift; end
+      8'h13: begin key_P <= hid_value; key_shift <= mod_shift; end
+      8'h14: begin key_Q <= hid_value; key_shift <= mod_shift; end
+      8'h15: begin key_R <= hid_value; key_shift <= mod_shift; end
+      8'h16: begin key_S <= hid_value; key_shift <= mod_shift; end
+      8'h17: begin key_T <= hid_value; key_shift <= mod_shift; end
+      8'h18: begin key_U <= hid_value; key_shift <= mod_shift; end
+      8'h19: begin key_V <= hid_value; key_shift <= mod_shift; end
+      8'h1A: begin key_W <= hid_value; key_shift <= mod_shift; end
+      8'h1B: begin key_X <= hid_value; key_shift <= mod_shift; end
+      8'h1C: begin key_Y <= hid_value; key_shift <= mod_shift; end
+      8'h1D: begin key_Z <= hid_value; key_shift <= mod_shift; end
+      8'h1E: begin
+        key_1 <= hid_value & ~mod_shift;
+        key_exclamation <= hid_value & mod_shift;
+      end
+      8'h1F: begin
+        key_2 <= hid_value & ~mod_shift;
+        key_at <= hid_value & mod_shift;
+      end
+      8'h20: begin
+        key_3 <= hid_value & ~mod_shift;
+        key_hash <= hid_value & mod_shift;
+      end
+      8'h21: begin
+        key_4 <= hid_value & ~mod_shift;
+        key_dollar <= hid_value & mod_shift;
+      end
+      8'h22: begin
+        key_5 <= hid_value & ~mod_shift;
+        key_percent <= hid_value & mod_shift;
+      end
+      8'h23: begin
+        key_6 <= hid_value & ~mod_shift;
+        key_arrow_up <= hid_value & mod_shift;
+      end
+      8'h24: begin
+        key_7 <= hid_value & ~mod_shift;
+        key_and <= hid_value & mod_shift;
+      end
+      8'h25: begin
+        key_8 <= hid_value & ~mod_shift;
+        key_star <= hid_value & mod_shift;
+      end
+      8'h26: begin
+        key_9 <= hid_value & ~mod_shift;
+        key_parenthesis_left <= hid_value & mod_shift;
+      end
+      8'h27: begin
+        key_0 <= hid_value & ~mod_shift;
+        key_parenthesis_right <= hid_value & mod_shift;
+      end
+      8'h28, 8'h58: begin key_return <= hid_value; key_shift <= mod_shift; end
+      8'h29: begin
+        key_runstop <= hid_value;
+        key_restore <= hid_value;
+      end
+      8'h2A: begin key_del <= hid_value; key_shift <= mod_shift; end
+      8'h2B: begin key_restore <= hid_value; key_shift <= mod_shift; end
+      8'h2C: begin key_space <= hid_value; key_shift <= mod_shift; end
+      8'h2D: begin
+        key_minus <= hid_value & ~mod_shift;
+        key_tape_play <= hid_value & mod_shift;
+      end
+      8'h2E: begin
+        key_equal <= hid_value & ~mod_shift;
+        key_plus <= hid_value & mod_shift;
+      end
+      8'h2F: begin
+        key_bracket_left <= hid_value & ~mod_shift;
+        key_arrow_left <= hid_value & mod_shift;
+      end
+      8'h30: begin
+        key_bracket_right <= hid_value & ~mod_shift;
+        key_F1 <= hid_value & mod_shift;
+      end
+      8'h32: begin
+        key_runstop <= hid_value;
+        key_shift <= mod_shift;
+        key_tape_play <= hid_value & mod_shift;
+      end
+      8'h33: begin
+        key_colon <= hid_value & mod_shift;
+        key_semicolon <= hid_value & ~mod_shift;
+      end
+      8'h34: begin
+        key_pound <= hid_value & ~mod_shift;
+        key_quote <= hid_value & mod_shift;
+      end
+      8'h35: begin key_runstop <= hid_value; key_shift <= mod_shift; end
+      8'h36: begin
+        key_comma <= hid_value & ~mod_shift;
+        key_angle_left <= hid_value & mod_shift;
+      end
+      8'h37: begin
+        key_dot <= hid_value & ~mod_shift;
+        key_angle_right <= hid_value & mod_shift;
+      end
+      8'h38: begin
+        key_slash <= hid_value & ~mod_shift;
+        key_question <= hid_value & mod_shift;
+      end
+      8'h39: key_caps <= hid_value;
+      8'h3A: key_F1 <= hid_value;
+      8'h3B: key_F2 <= hid_value;
+      8'h3C: key_F3 <= hid_value;
+      8'h3D: key_F4 <= hid_value;
+      8'h3E: key_F5 <= hid_value;
+      8'h3F: key_F6 <= hid_value;
+      8'h40: key_F7 <= hid_value;
+      8'h41: key_F8 <= hid_value;
+      8'h45: key_F12 <= hid_value;
+      8'h46: key_sysrq <= (hid_state == HID_STATE_PRESS);  // capture sysrq even if overlay is enabled
+      8'h48: key_pause_break <= hid_value;
+      8'h49: key_ins <= hid_value;
+      8'h4A: begin
+        key_home <= hid_value & ~mod_shift;
+        key_cls <= hid_value & mod_shift;
+      end
+      8'h4C: key_del <= hid_value;
+      8'h4F: key_right <= hid_value;
+      8'h50: key_left <= hid_value;
+      8'h51: key_down <= hid_value;
+      8'h52: key_up <= hid_value;
+      default: ;
+    endcase
+
+    if (shift) begin
+      key_shift <= 0;
     end
-  end else if (shift) begin
-    key_shift <= 0;
   end
 end
 
 always @(posedge clk) begin
   if (reset)
-    hid_enable <= 1'b0;
-  else if (enable && hid_key_report)
-    hid_enable <= 1'b1;
-  else if (hid_counter == 0 && !hid_changed)
-    hid_enable <= 1'b0;
+    hid_trigger <= 1'b0;
+  else if (hid_key_report)
+    hid_trigger <= 1'b1;
+  else if (hid_state != HID_STATE_IDLE)
+    hid_trigger <= 1'b0;
 end
 
 endmodule

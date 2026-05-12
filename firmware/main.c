@@ -36,6 +36,7 @@
 #include "c64_disk.h"
 #include "c64_event.h"
 #include "c64_tape.h"
+
 #include "embedded_cli.h"
 #include "input.h"
 #include "power.h"
@@ -235,14 +236,14 @@ static int c64_cart_load(void) {
     f_unmount("");
 
     if (res != FR_OK) {
-        printf("c64_cart_load: cartridge ROM not found in path %s", C64_AR_PATH);
+        printf("c64_cart_load: cartridge ROM not found in path %s\n", C64_AR_PATH);
         return -1;
     }
 
     ret = read_file_to_mem(C64_AR_PATH, (uint8_t *)C64_AR_BASE, C64_AR_SIZE);
 
     if (ret > 0) {
-        printf("c64_cart_load: copied %d bytes from %s into %p", ret, C64_AR_PATH, (uint8_t *)C64_AR_BASE);
+        printf("c64_cart_load: copied %d bytes from %s into %p\n", ret, C64_AR_PATH, (uint8_t *)C64_AR_BASE);
     }
 
     return ret;
@@ -632,10 +633,11 @@ static void c64_control_isr(void) {
     uint32_t pending = c64_control_ev_pending_read();
     c64_control_ev_pending_write(pending);
 
-    input_isr(pending);
     c64_disk_isr(pending);
     c64_tape_isr(pending);
     c64_isr(pending);
+
+    input_isr(pending);
 }
 
 int main(void) {
@@ -678,9 +680,10 @@ int main(void) {
             show_prompt |= console_service();
         }
 
-        show_prompt |= input_service();
         show_prompt |= c64_disk_service();
         show_prompt |= c64_tape_service();
+
+        show_prompt |= input_service();
     }
 
     return 0;

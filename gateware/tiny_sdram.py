@@ -53,12 +53,14 @@ class TinySDRAM(Module):
         clk_freq,
         clk_domain="sys",
         p0_burst_length=1,
-        p1_burst_length=2,
+        p1_burst_length=1,
+        p2_burst_length=2,
         cas_latency=2,
         allow_standby=1,
     ):
         self.p0 = p0 = TinySDRAMPort(p0_burst_length)
         self.p1 = p1 = TinySDRAMPort(p1_burst_length)
+        self.p2 = p2 = TinySDRAMPort(p2_burst_length)
 
         self.init_complete = Signal()
 
@@ -74,6 +76,11 @@ class TinySDRAM(Module):
         p1_wdata_ready = Signal()
         p1_rdata_valid = Signal()
 
+        p2_cmd_valid = Signal()
+        p2_cmd_ready = Signal()
+        p2_wdata_ready = Signal()
+        p2_rdata_valid = Signal()
+
         if clk_domain != "sys":
             # I know this CDC sucks, but given that we have FSM attached to P0 / P1 ports
             # waiting for rdata_valid / wdata_ready, delayed deassertion cmd_ready
@@ -84,6 +91,8 @@ class TinySDRAM(Module):
                 MultiReg(p0_cmd_ready, p0.cmd_ready, odomain="sys"),
                 MultiReg(p1.cmd_valid, p1_cmd_valid, odomain=clk_domain),
                 MultiReg(p1_cmd_ready, p1.cmd_ready, odomain="sys"),
+                MultiReg(p2.cmd_valid, p2_cmd_valid, odomain=clk_domain),
+                MultiReg(p2_cmd_ready, p2.cmd_ready, odomain="sys"),
             ]
 
             self.submodules.p0_wdata_ready_ps = p0_wdata_ready_ps = PulseSynchronizer(clk_domain, "sys")
@@ -102,6 +111,14 @@ class TinySDRAM(Module):
             self.comb += p1_rdata_valid_ps.i.eq(p1_rdata_valid)
             self.comb += p1.rdata_valid.eq(p1_rdata_valid_ps.o)
 
+            self.submodules.p2_wdata_ready_ps = p2_wdata_ready_ps = PulseSynchronizer(clk_domain, "sys")
+            self.comb += p2_wdata_ready_ps.i.eq(p2_wdata_ready)
+            self.comb += p2.wdata_ready.eq(p2_wdata_ready_ps.o)
+
+            self.submodules.p2_rdata_valid_ps = p2_rdata_valid_ps = PulseSynchronizer(clk_domain, "sys")
+            self.comb += p2_rdata_valid_ps.i.eq(p2_rdata_valid)
+            self.comb += p2.rdata_valid.eq(p2_rdata_valid_ps.o)
+
         else:
             self.comb += [
                 self.init_complete.eq(init_complete),
@@ -113,20 +130,27 @@ class TinySDRAM(Module):
                 p1.cmd_ready.eq(p1_cmd_ready),
                 p1.wdata_ready.eq(p1_wdata_ready),
                 p1.rdata_valid.eq(p1_rdata_valid),
+                p2_cmd_valid.eq(p2.cmd_valid),
+                p2.cmd_ready.eq(p2_cmd_ready),
+                p2.wdata_ready.eq(p2_wdata_ready),
+                p2.rdata_valid.eq(p2_rdata_valid),
             ]
 
         self.comb += [
             p0.init_complete.eq(self.init_complete),
             p1.init_complete.eq(self.init_complete),
+            p2.init_complete.eq(self.init_complete),
         ]
 
         self.specials += Instance(
             "tiny_sdram",
             p_CLOCK_SPEED=int(clk_freq),
-            p_P0_BURST_LENGTH=p0_burst_length,
-            p_P1_BURST_LENGTH=p1_burst_length,
             p_CAS_LATENCY=cas_latency,
             p_ALLOW_STANDBY=allow_standby,
+            p_MAX_BURST_LENGTH=max(p0_burst_length, p1_burst_length, p2_burst_length),
+            p_P0_BURST_LENGTH=p0_burst_length,
+            p_P1_BURST_LENGTH=p1_burst_length,
+            p_P2_BURST_LENGTH=p2_burst_length,
             i_clk=ClockSignal(clk_domain),
             i_reset=ResetSignal(clk_domain),
             o_init_complete=init_complete,
@@ -148,6 +172,15 @@ class TinySDRAM(Module):
             o_p1_wdata_ready=p1_wdata_ready,
             o_p1_rdata=p1.rdata,
             o_p1_rdata_valid=p1_rdata_valid,
+            i_p2_cmd_addr=p2.cmd_addr,
+            i_p2_cmd_we=p2.cmd_we,
+            i_p2_cmd_valid=p2_cmd_valid,
+            o_p2_cmd_ready=p2_cmd_ready,
+            i_p2_wdata=p2.wdata,
+            i_p2_wdata_we=p2.wdata_we,
+            o_p2_wdata_ready=p2_wdata_ready,
+            o_p2_rdata=p2.rdata,
+            o_p2_rdata_valid=p2_rdata_valid,
             io_SDRAM_DQ=pads.dq,
             o_SDRAM_A=pads.a,
             o_SDRAM_DQM=pads.dm,

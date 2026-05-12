@@ -95,7 +95,6 @@ wire [1:0] stp;
 wire       act;
 wire [1:0] freq;
 wire       wps_n = ~readonly ^ ch_timeout[23];
-wire       track_delay;
 
 reg [6:0] track;
 
@@ -158,7 +157,7 @@ c1541_gcr c1541_gcr (
   .wps_n(wps_n),
   .sync_n(gcr_sync_n),
   .byte_n(gcr_byte_n),
-  .busy(busy || !disk_ready || track_delay),
+  .busy(busy || !disk_ready),
 
   .img_mounted(img_mounted),
   .img_id(img_id),
@@ -203,22 +202,6 @@ always @(*) begin
     default: ;
   endcase
 end
-
-localparam integer TRACK_DELAY         = 1000;  // 1 ms, in 1MHz ticks
-localparam integer DELAY_COUNTER_WIDTH = $clog2(TRACK_DELAY);
-
-reg [DELAY_COUNTER_WIDTH-1:0] delay_counter;
-
-always @(posedge clk) begin
-  if (reset || img_mounted)
-    delay_counter <= 0;
-  else if (track_next != track)
-    delay_counter <= TRACK_DELAY[DELAY_COUNTER_WIDTH-1:0];
-  else if (ph2_r && delay_counter != 0)
-    delay_counter <= delay_counter - 1;
-end
-
-assign track_delay = (delay_counter != 0);
 
 always @(posedge clk) begin
   if (reset) begin

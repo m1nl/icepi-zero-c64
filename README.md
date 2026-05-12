@@ -196,6 +196,13 @@ The `flag <name> [0|1]` command (and the persisted JSON file) operate on the fol
 | `cart_present`          | Indicates that a cartridge is present; ignored if `/c64_roms/ar6_pal.bin` is not present upon reboot          |
 | `iec_master_disconnect` | Disconnects the C64 from the virtual IEC bus.                                                                 |
 
+## REU support
+
+Core has 4MiB REU support, which is activated whenever `cart_present` flag is not set. AR IO2 conflicts REU registers, so it's not possible to make them coexist. REU implementation has been validated and works with the following programs:
+- memtest (https://csdb.dk/release/?id=157941)
+- Sonic the Hedgehog (https://csdb.dk/release/?id=212523)
+- TreuLove (glitches a bit; https://csdb.dk/release/?id=144105)
+
 ## Note on AI usage
 
 AI isn’t perfect for Verilog, but it can be useful for design validation. In my experience, I’ve several times simply forgotten to connect a wire, mismatched its width, and a single pass with Claude caught it quickly saving hours of debugging work. It’s also very helpful for instantiating modules and wiring them up in bulk or generating a basic testbench skeleton in Python / Verilator / cocotb. However, when it comes to designing new HDL from scratch, it doesn’t add much value.

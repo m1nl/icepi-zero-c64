@@ -2,10 +2,10 @@
 #define MAIN_H
 
 #define C64_RAM_BASE 0x41800000
-#define C64_RAM_SIZE 0xFFFF
+#define C64_RAM_SIZE 0x10000
 
 #define C64_AR_BASE 0x41840000
-#define C64_AR_SIZE 0xFFFF
+#define C64_AR_SIZE 0x10000
 #define C64_AR_PATH "/c64_roms/ar6_pal.bin"
 
 #define FLAGS_JSON_PATH "/c64_flags.json"
