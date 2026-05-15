@@ -31,13 +31,23 @@ Hardware used - [IcePi-Zero](https://github.com/cheyao/icepi-zero) FPGA board (L
 Please keep in mind that the board is FPGA-based, and the USB HID controller is implemented in gateware. There is no dedicated USB controller chip on the board itself. As a result, some USB HID devices may not be compatible with the board.
 
 I have tested the following devices and can confirm they work properly:
-
 - 8BitDo Pro 3 utilizing bundled 2.4G wireless dongle
 - 8BitDo Ultimate 2C wireless utilizing bundled 2.4G wireless dongle (non-Bluetooth version)
+- Logitech, Inc. Unifying Receiver w/ Y-R0012
+- Logitech, Inc. Unifying Receiver w/ K400r
 - SpeedLink COMPETITION PRO Extra USB Joystick
-- Logitech Keyboard with Logitech Unifying Receiver
+- Legacy Logitech low-speed mouse
+- IBM Corp. NetVista Full Width Keyboard
+- Keychron C3 Pro
+- Keychron K2
 
-Other low-speed and full-speed USB 2.0 HID devices should generally work as well. However, avoid combo devices that include built-in USB hub functionality. Each port supports only a single device, as it has a separate USB soft controller attached to it.
+Not working:
+- 8BitDo 8BitDo Retro Keyboard Receiver (2dc8:5201)
+- 8BitDo 8BitDo Retro 87 Adapter X (2dc8:202e)
+
+The 8BitDo retro keyboard does not send report events even after successful enumeration. It appears the keyboard exposes two interfaces (mouse + keyboard), and both must be enumerated before reports start being received. There are also reports that this keyboard supports only NKRO and not 6KRO, despite BOOT protocol support (typically associated with 6KRO) being required by the HID standard. Further work may be done to add support for this keyboard, but no guarantees can be made given the extent of changes that may be required.
+
+Other low-speed and full-speed USB 2.0 HID devices should generally work as well. However, avoid composite devices that include built-in USB hub or keyboard + mouse functionality. Each port supports only a single device, as it has a separate USB soft controller attached to it.
 
 ## Building
 
