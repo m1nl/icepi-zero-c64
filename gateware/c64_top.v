@@ -757,6 +757,7 @@ wire        rom_ar_select;
 wire        ar_nmi;
 wire        ar_irq;
 wire        ar_freeze;
+wire [7:0]  ar_flags;
 
 wire        sdram_pending;
 
@@ -780,6 +781,7 @@ c64_action_replay c64_action_replay_0 (
   .io2_cen       (cart_io2_cen),
   .nmi           (ar_nmi),
   .irq           (ar_irq),
+  .flags         (ar_flags),
   .sdram_pending (sdram_pending),
   .rom_addr      (rom_ar_addr),
   .rom_enable    (rom_ar_enable),
@@ -836,6 +838,8 @@ wire        cart_ba;
 wire        cart_we;
 wire [15:0] cart_addr;
 reg         cart_present;
+
+reg         reu_present;
 
 wire        roml_select;
 wire        romh_select;
@@ -940,6 +944,8 @@ c64_bus_arbiter c64_bus_arbiter_0 (
   .reu_dma_we     (reu_dma_we),
   .reu_dma_active (reu_dma_active),
 
+  .reu_present (reu_present),
+
   .cart_present (cart_present),
   .cart_game    (cart_game),
   .cart_exrom   (cart_exrom),
@@ -952,6 +958,7 @@ c64_bus_arbiter c64_bus_arbiter_0 (
   .cart_ba      (cart_ba),
   .cart_we      (cart_we),
   .cart_addr    (cart_addr),
+  .cart_flags   (ar_flags),
 
   .roml_select (roml_select),
   .romh_select (romh_select),
@@ -981,12 +988,14 @@ c64_bus_arbiter c64_bus_arbiter_0 (
   .c1541_iec_clk_in   (c1541_iec_clk_in),
 
   .va_delay              (flags[5]),
-  .iec_master_disconnect (flags[12])
+  .iec_master_disconnect (flags[13])
 );
 
 always @(posedge clk) begin
-  if (cpu_reset)
+  if (cpu_reset) begin
     cart_present <= flags[11];
+    reu_present  <= flags[12];
+  end
 end
 
 // ---------------------------------------------------------------------------
@@ -1034,7 +1043,7 @@ assign cpu_reset = cpu_reset_i || vic_cpu_reset || rst;
 // IRQ / NMI logic
 // ---------------------------------------------------------------------------
 
-assign cpu_irq = cia1_irq | vic_irq | reu_irq | (ar_irq && cart_present);
+assign cpu_irq = cia1_irq | vic_irq | (reu_irq && reu_present) | (ar_irq && cart_present);
 assign cpu_nmi = cia2_irq | kbd_restore_toggle | (ar_nmi && cart_present);
 
 // ---------------------------------------------------------------------------

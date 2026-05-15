@@ -45,6 +45,8 @@ module c64_action_replay (
   output wire nmi,
   output wire irq,
 
+  output wire [7:0] flags,
+
   input wire sdram_pending,
 
   output wire [14:0] rom_addr,
@@ -122,6 +124,8 @@ LS273_D_FF_8BIT u4 (
   .d(din),
   .q(u4_q)
 );
+
+assign flags = u4_q;
 
 assign u7c_out = ~(u4_q[6]);
 assign u7d_out = ~(io1_cen || u4_q[2]);

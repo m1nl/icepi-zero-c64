@@ -23,7 +23,8 @@
 #define FLAG_JOY_EMULATION_0 9
 #define FLAG_JOY_EMULATION_1 10
 #define FLAG_CART_PRESENT 11
-#define FLAG_IEC_MASTER_DISCONNECT 12
+#define FLAG_REU_PRESENT 12
+#define FLAG_IEC_MASTER_DISCONNECT 13
 
 enum {
     COMMAND_HELP = 0,
@@ -68,7 +69,8 @@ const struct {
     {"joy_emulation_0", 9, "Joystick port 1 keyboard emulation"},
     {"joy_emulation_1", 10, "Joystick port 2 keyboard emulation"},
     {"cart_present", 11, "Cartridge present"},
-    {"iec_master_disconnect", 12, "Disconnect C64 from IEC bus"},
+    {"reu_present", 12, "4MiB REU present"},
+    {"iec_master_disconnect", 13, "Disconnect C64 from IEC bus"},
 };
 
 #define FLAG_DEFS_COUNT ((int)(sizeof(flag_defs) / sizeof(flag_defs[0])))

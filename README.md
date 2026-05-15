@@ -204,12 +204,13 @@ The `flag <name> [0|1]` command (and the persisted JSON file) operate on the fol
 | `joy_emulation_0`       | Allows using the host keyboard as joystick port 1 (cursor keys + `F`/`Space` for fire).                       |
 | `joy_emulation_1`       | Same as above, but for joystick port 2.                                                                       |
 | `cart_present`          | Indicates that a cartridge is present; ignored if `/c64_roms/ar6_pal.bin` is not present upon reboot          |
+| `reu_present`           | Indicates that 4MiB REU is present; changes to this flag require `reset` to take effect   .                   |
 | `iec_master_disconnect` | Disconnects the C64 from the virtual IEC bus.                                                                 |
 
 ## REU support
 
-Core has 4MiB REU support, which is activated whenever `cart_present` flag is not set. AR IO2 conflicts REU registers, so it's not possible to make them coexist. REU implementation has been validated and works with the following programs:
-- memtest (https://csdb.dk/release/?id=157941)
+The core includes 4 MiB REU support, which is enabled whenever the `reu_present` flag is set. Since AR IO2 conflicts with REU registers, some additional arbitration logic is used to handle access to $DF00–$DFFF when both `cart_present` and `reu_present` flags are enabled. If you encounter any issues, please disable one of the flags, as REU is generally not compatible with the AR cartridge. The REU implementation has been validated and confirmed to work with the following programs:
+- memtest (does not work when AR is enabled; https://csdb.dk/release/?id=157941)
 - Sonic the Hedgehog (https://csdb.dk/release/?id=212523)
 - TreuLove (glitches a bit; https://csdb.dk/release/?id=144105)
 

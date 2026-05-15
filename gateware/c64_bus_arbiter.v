@@ -113,6 +113,8 @@ module c64_bus_arbiter (
   input  wire        reu_dma_active,
   input  wire        reu_dma_we,
 
+  input  wire        reu_present,
+
   input  wire        cart_present,
   input  wire        cart_game,
   input  wire        cart_exrom,
@@ -125,6 +127,7 @@ module c64_bus_arbiter (
   output wire        cart_ba,
   output reg         cart_we,
   output reg  [15:0] cart_addr,
+  input  wire [7:0]  cart_flags,
 
   output reg         roml_select,
   output reg         romh_select,
@@ -294,10 +297,24 @@ assign cia2_pa_in = {cia2_iec_data_out, cia2_iec_clk_out,
 reg [15:0] bus_addr;
 reg        bus_we;
 
+wire [3:0] bus_addr_msn;
+wire [3:0] bus_addr_io;
+
+assign bus_addr_msn = bus_addr[15:12];
+assign bus_addr_io  = bus_addr[11:8];
+
 reg [7:0] last_bus;
 reg [7:0] bus;
 
 reg io_enable;
+reg reu_override;
+
+always @(posedge vic_clk_dot4x) begin
+  if (!reu_cen)
+    reu_override <= 1'b1;
+  else if (!cart_io2_cen)
+    reu_override <= 1'b0;
+end
 
 always @(posedge vic_clk_dot4x)
   last_bus <= bus;
@@ -347,12 +364,6 @@ assign exrom = cart_exrom || !cart_present;
 assign loram  = cpu_pout[0];
 assign hiram  = cpu_pout[1];
 assign charen = cpu_pout[2];
-
-wire [3:0] bus_addr_msn;
-wire [3:0] bus_addr_io;
-
-assign bus_addr_msn = bus_addr[15:12];
-assign bus_addr_io  = bus_addr[11:8];
 
 assign cart_roml = !roml_select || !cart_present;
 assign cart_romh = !romh_select || !cart_present;
@@ -648,10 +659,27 @@ always @(*) begin
             cart_io1_cen = 1'b0;
         end
         4'hf: begin
-          if (cart_present) // && (!game || !exrom))
+          if (!reu_present && !cart_present) begin
+            /* no-op */
+          end else if (!reu_present && cart_present)
             cart_io2_cen = 1'b0;
-          else
+          else if (reu_present && !cart_present)
             reu_cen = 1'b0;
+          // here we assume we must arbitrate IO2 / REU access
+          else if (!cart_game || !cart_exrom)
+            cart_io2_cen = 1'b0;
+          else if (bus_we) begin
+            if (cart_flags[2] || !cart_flags[5])
+              // 5    1 = enable RAM at ROML ($8000-$9FFF) & I/O2 ($DF00-$DFFF = $9F00-$9FFF)
+              // 2    1 = disable cartridge (turn off $DE00)
+              // REU override is set when bus is written and 1) cartridge is disabled or 2) ROM is mapped to $DF00-$DFFF
+              reu_cen = 1'b0;
+            else
+              cart_io2_cen = 1'b0;
+          end else if (reu_override)
+            reu_cen = 1'b0;
+          else
+            cart_io2_cen = 1'b0;
         end
         default: ;  /* read last bus state */
       endcase
