@@ -8,7 +8,6 @@
 
 # Adapted and modified for Icepi Zero C64 project by m1nl
 
-from boards.platforms import icepi_zero
 from litex.build.io import DDROutput
 from litex.gen import *
 from litex.soc.cores.bitbang import I2CMaster
@@ -20,6 +19,7 @@ from litex.soc.integration.soc_core import *
 from litex.soc.interconnect import stream, wishbone
 from migen import *
 
+from boards.platforms import icepi_zero
 from gateware.c64_top import C64Top
 from gateware.tiny_sdram import TinySDRAM, TinySDRAMWishboneAdapter
 from gateware.video_terminal_overlay import VideoTerminalOverlay
@@ -59,7 +59,7 @@ class _CRG(LiteXModule):
 
         if sdram_rate == "1:3":
             pll.create_clkout(self.cd_sys3x, 3 * sys_clk_freq)
-            pll.create_clkout(self.cd_sys3x_ps, 3 * sys_clk_freq, phase=90)
+            pll.create_clkout(self.cd_sys3x_ps, 3 * sys_clk_freq, phase=120)
         else:
             pll.create_clkout(
                 self.cd_sys_ps, sys_clk_freq, phase=45
