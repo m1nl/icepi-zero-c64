@@ -133,7 +133,7 @@ reg [7:0] r_reu_data;   // data latched from REU memory
 
 wire [1:0] xfer_type = r_cmd[1:0];
 
-assign reu_dma_active    = (state != ST_IDLE);
+assign reu_dma_active = (state != ST_IDLE);
 
 initial begin
   r_int             = 2'b00;
@@ -182,21 +182,6 @@ always @(*) begin
   end
 end
 
-reg ba_reg;
-reg ba_reg2;
-
-always @(posedge clk) begin
-  if (phi2_l) begin
-    ba_reg  <= vic_ba;
-    ba_reg2 <= ba_reg;
-  end
-  // sticky-OR: once BA goes high keep regs high until next phi2_n sample
-  if (vic_ba) begin
-    ba_reg  <= 1'b1;
-    ba_reg2 <= 1'b1;
-  end
-end
-
 always @(posedge clk) begin
   if (rst) begin
     r_int             <= 2'b00;
@@ -224,14 +209,13 @@ always @(posedge clk) begin
     state             <= ST_IDLE;
 
   end else begin
-
     // -----------------------------------------------------------------------
     // Register file write / read side-effects (CPU side, phi2_h)
     // -----------------------------------------------------------------------
-    if (phi2_h && !reu_cen) begin
+    if (!reu_cen) begin
       r_addr <= reu_addr;
 
-      if (reu_we) begin
+      if (reu_we && phi2_h) begin
         case (reu_addr)
           4'h1: r_cmd <= reu_din;
           4'h2: begin r_c64_addr <= {r_c64_addr_shadow[15:8], reu_din};       r_c64_addr_shadow[7:0]   <= reu_din;      end
@@ -245,8 +229,10 @@ always @(posedge clk) begin
           4'ha: r_addr_ctrl <= reu_din[7:6];
           default: ;
         endcase
-      end else begin
-        // clear status flags on read of $DF00
+      end
+
+      if (!reu_we && phi2_n) begin
+        // clear status flags on read of $DF00 at the end of phi2 cycle
         if (reu_addr == 4'h0)
           r_int <= 2'b00;
       end
@@ -274,10 +260,8 @@ always @(posedge clk) begin
       // Types using this state: 00 (C64->REU), 10 (SWAP), 11 (VERIFY)
       // c64_addr advances for all except SWAP (SWAP advances in WRITE_C64)
       ST_READ_C64: begin
-        reu_dma_addr <= r_c64_addr;
-        reu_dma_we   <= 1'b0;
-
-        if (phi2_p && ba_reg2 && !c64_bus_valid) begin
+        if (vic_ba && phi2_p && !c64_bus_valid) begin
+          reu_dma_addr <= r_c64_addr;
           c64_bus_valid <= 1'b1;
         end
         if (phi2_n && c64_bus_valid) begin
@@ -286,9 +270,20 @@ always @(posedge clk) begin
           if (!r_addr_ctrl[1] && xfer_type != 2'b10)
             r_c64_addr <= r_c64_addr + 1;
           case (xfer_type)
-            2'b00:   state <= ST_WRITE_REU;  // C64->REU: write to REU
-            2'b10:   state <= ST_READ_REU;   // SWAP: read REU next
-            2'b11:   state <= ST_READ_REU;   // VERIFY: read REU to compare
+            2'b00: state <= ST_WRITE_REU;  // C64->REU: write to REU
+            2'b10: state <= ST_READ_REU;   // SWAP: read REU next
+            2'b11: begin                   // VERIFY: compare data, read REU
+              if (r_xfer_len == 16'd1)
+                state <= ST_DONE;
+              else begin
+                r_xfer_len <= r_xfer_len - 1;
+                state <= ST_READ_REU;
+              end
+              if (reu_mem_dout != reu_din) begin
+                r_int[0] <= 1'b1;
+                state    <= ST_DONE;
+              end
+            end
             default: state <= ST_DONE;
           endcase
         end
@@ -325,17 +320,9 @@ always @(posedge clk) begin
             2'b10: begin  // SWAP: exp_addr deferred to WRITE_REU, write to C64
               state <= ST_WRITE_C64;
             end
-            2'b11: begin  // VERIFY: advance exp_addr, compare with r_c64_data
+            2'b11: begin  // VERIFY: advance exp_addr, then read from C64
               if (!r_addr_ctrl[0]) r_exp_addr <= r_exp_addr + 1;
-              if (reu_mem_dout != r_c64_data) begin
-                r_int[0] <= 1'b1;
-                state    <= ST_DONE;
-              end else if (r_xfer_len == 16'd1) begin
-                state <= ST_DONE;
-              end else begin
-                r_xfer_len <= r_xfer_len - 1;
-                state      <= ST_READ_C64;
-              end
+              state <= ST_READ_C64;
             end
             default: state <= ST_DONE;
           endcase
@@ -349,10 +336,9 @@ always @(posedge clk) begin
       //
       // Types using this state: 01 (REU->C64), 10 (SWAP)
       ST_WRITE_C64: begin
-        reu_dma_addr <= r_c64_addr;
-        reu_dma_we   <= 1'b1;
-
-        if (phi2_p && ba_reg2 && !c64_bus_valid) begin
+        if (vic_ba && phi2_p && !c64_bus_valid) begin
+          reu_dma_addr <= r_c64_addr;
+          reu_dma_we   <= 1'b1;
           c64_bus_valid <= 1'b1;
         end
         if (phi2_n && c64_bus_valid) begin
@@ -402,10 +388,11 @@ always @(posedge clk) begin
 
       // -- DONE: release DMA, set interrupt flags, optional autoload --------
       ST_DONE: begin
-        if (phi2_l && vic_ba) begin
+        if (phi2_p) begin
           // set EOB unless a verify fault fired before the last byte
-          if (!(r_int[0] && r_xfer_len != 16'd1))
+          if (!(r_int[0] && r_xfer_len != 16'd1)) begin
             r_int[1] <= 1'b1;
+          end
 
           // autoload: restore shadow registers
           if (r_cmd[5]) begin
