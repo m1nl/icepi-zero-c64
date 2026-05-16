@@ -246,7 +246,7 @@ char input_block(void) {
     return input_nonblock();
 }
 
-void input_isr(uint32_t pending) {
+void __attribute__((section(".sramfunc"), noinline)) input_isr(uint32_t pending) {
     if (pending & EV_HID_KEY) {
         uint8_t keycode = c64_control_hid_key_0_read();
         if (hid_keycode != keycode) {

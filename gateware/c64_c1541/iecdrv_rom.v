@@ -22,6 +22,7 @@
 module iecdrv_rom #(
   parameter AW            = 10,
   parameter DW            = 32,
+  parameter DEPTH         = (1 << AW),
   parameter MEM_INIT_FILE = ""
 ) (
   input  wire clk,
@@ -30,8 +31,6 @@ module iecdrv_rom #(
   input  wire [AW-1:0] addr,
   output reg  [DW-1:0] dout
 );
-
-localparam integer DEPTH = (1<<AW);
 
 reg [DW-1:0] mem[0:DEPTH-1];
 reg [AW-1:0] addr_i;

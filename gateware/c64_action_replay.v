@@ -49,11 +49,19 @@ module c64_action_replay (
 
   input wire sdram_pending,
 
-  output wire [14:0] rom_addr,
+  output wire [15:0] rom_addr,
   output reg         rom_enable,
   input  wire        rom_ready,
   input  wire [7:0]  rom_dout,
-  output wire        rom_select
+  output wire        rom_select,
+
+  output wire [15:0] ram_addr,
+  output reg         ram_enable,
+  output wire        ram_we,
+  input  wire        ram_ready,
+  input  wire [7:0]  ram_dout,
+  output wire [7:0]  ram_din,
+  output wire        ram_select
 );
 
 wire reset_n;
@@ -100,7 +108,7 @@ LS74_D_FF u6b (
 );
 
 assign nmi = u6a_q;
-assign irq = 1'b0;
+assign irq = u6a_q;
 
 wire [3:0] u5_q;
 
@@ -146,44 +154,26 @@ c64_action_replay_pla u3_pla (
 assign game  = pla_oe ? o3 : 1'b1;
 assign exrom = pla_oe ? o4 : 1'b1;
 
-wire ram_en;
-wire ram_select;
-wire ram_we;
-
-wire [12:0] ram_addr;
-wire  [7:0] ram_dout;
-
 assign ram_select = pla_oe ? !o2 : 1'b0;
 assign ram_we     = we;
-assign ram_addr   = addr[12:0];
-assign ram_en     = ram_we ? phi2_n : phi2_h;
 
-c64_ram #(
-  .DW(8),
-  .AW(13)
-) ram (
-  .clk(clk),
-  .addr(ram_addr),
-  .din(din),
-  .dout(ram_dout),
-  .enable(ram_select && ram_en && !reset),
-  .we(ram_we)
-);
+assign ram_addr   = {u4_q[7], u4_q[4:3], addr[12:0]};
 
 wire rom_oe;
 
-assign rom_select = pla_oe ? !o1 && rom_oe : 1'b0;
 assign rom_oe     = ~(romh && roml && io2_cen);
+assign rom_select = (pla_oe ? !o1 : 1'b0) && rom_oe;
 
-assign rom_addr = {u4_q[4:3], addr[12:0]};
+assign rom_addr = {u4_q[7], u4_q[4:3], addr[12:0]};
 
-assign dout = !io1_cen   ? u4_q     :
-              ram_select ? ram_dout :
-              rom_select ? rom_dout : 8'hXX;
+assign dout = !io1_cen   ? {u4_q[7], 1'b0, u4_q[5:3], 1'b0, 2'b0} :
+              ram_select ? ram_dout                               :
+              rom_select ? rom_dout                               : 8'hXX;
 
 always @(posedge clk) begin
   if (reset) begin
     rom_enable <= 1'b0;
+    ram_enable <= 1'b0;
 
   end else begin
     if (rom_enable && rom_ready)
@@ -191,6 +181,12 @@ always @(posedge clk) begin
 
     if (sdram_pending)
       rom_enable <= rom_select;
+
+    if (ram_enable && ram_ready)
+      ram_enable <= 1'b0;
+
+    if (sdram_pending)
+      ram_enable <= ram_select;
   end
 end
 

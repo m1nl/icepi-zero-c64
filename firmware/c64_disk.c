@@ -36,10 +36,10 @@
 
 #include "c64_event.h"
 
+#define WRITE_COMMIT_INTERVAL_CYCLES (5 * CONFIG_CLOCK_FREQUENCY) // commit changes every 5 seconds
+
 extern char _fdrive_shmem;
 extern char _edrive_shmem;
-
-#define WRITE_COMMIT_INTERVAL_CYCLES (5 * CONFIG_CLOCK_FREQUENCY) // commit changes every 5 seconds
 
 static char *mounted_path;
 
@@ -49,32 +49,32 @@ static size_t d64_size;
 static volatile int d64_dirty;
 static volatile uint64_t write_commit_cycles;
 
-static void serve_lba(uint32_t lba_req, uint32_t cnt) {
+static inline void serve_lba(uint32_t lba_req, uint32_t cnt) {
     uint8_t *dst = (uint8_t *)&_fdrive_shmem;
     uint32_t buf_size = (uint32_t)(&_edrive_shmem - &_fdrive_shmem);
     uint32_t copy_bytes = cnt * D64_SECTOR_SIZE;
     uint32_t offset = lba_req * D64_SECTOR_SIZE;
 
-    if (!d64_data || offset > d64_size) {
-        memset(dst, 0, copy_bytes);
-        goto exit;
-    }
-
     if (copy_bytes > buf_size)
         copy_bytes = buf_size;
+
+    if (!d64_data || offset > d64_size) {
+        set32(dst, 0, copy_bytes);
+        goto exit;
+    }
 
     size_t avail = d64_size - offset;
     if (copy_bytes > avail)
         copy_bytes = avail;
 
-    memcpy(dst, d64_data + offset, copy_bytes);
+    copy32(dst, d64_data + offset, copy_bytes);
 
 exit:
     flush_cpu_dcache();
     flush_l2_cache();
 }
 
-static void store_lba(uint32_t lba_req, uint32_t cnt) {
+static inline void store_lba(uint32_t lba_req, uint32_t cnt) {
     uint8_t *src = (uint8_t *)&_fdrive_shmem;
     uint32_t buf_size = (uint32_t)(&_edrive_shmem - &_fdrive_shmem);
     uint32_t copy_bytes = cnt * D64_SECTOR_SIZE;
@@ -90,14 +90,14 @@ static void store_lba(uint32_t lba_req, uint32_t cnt) {
     if (copy_bytes > avail)
         copy_bytes = avail;
 
-    memcpy(d64_data + offset, src, copy_bytes);
+    copy32(d64_data + offset, src, copy_bytes);
 
     d64_dirty = 1;
     timer0_uptime_latch_write(1);
     write_commit_cycles = timer0_uptime_cycles_read() + WRITE_COMMIT_INTERVAL_CYCLES;
 }
 
-void c64_disk_isr(uint32_t pending) {
+void __attribute__((section(".sramfunc"), noinline)) c64_disk_isr(uint32_t pending) {
     if (pending & EV_BLOCK_WR) {
         if (!c64_control_img_readonly_read()) {
             uint32_t req_lba = c64_control_block_lba_read();

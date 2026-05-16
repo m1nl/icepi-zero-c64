@@ -87,8 +87,8 @@ module c64_top #(
   input  wire iec_atn_in,
 
   // 1541 drive ROM
-  output wire        drive_rom_en,
-  output wire [11:0] drive_rom_addr,
+  output reg         drive_rom_en,
+  output reg  [12:0] drive_rom_addr,
   input  wire [31:0] drive_rom_dout,
 
   // 1541 drive shared memory
@@ -330,9 +330,9 @@ wire [7:0] cia1_ddra;
 wire [7:0] cia1_pb_in;
 wire [7:0] cia1_pb_out;
 wire [7:0] cia1_ddrb;
-wire       cia1_irq;
 wire       cia1_tod_out;
 wire       cia1_flag_n;
+wire       cia1_irq;
 wire       cia1_model = flags[0];
 
 c64_redip_cia #(
@@ -379,6 +379,11 @@ wire       cia2_we;
 wire [7:0] cia2_pa_in;
 wire [7:0] cia2_pa_out;
 wire [7:0] cia2_ddra;
+wire [7:0] cia2_pb_in;
+wire [7:0] cia2_pb_out;
+wire [7:0] cia2_ddrb;
+wire       cia2_flag_n;
+wire       cia2_pc_n;
 wire       cia2_irq;
 wire       cia2_model = flags[0];
 
@@ -399,15 +404,15 @@ c64_redip_cia #(
   .pa_in     (cia2_pa_in),
   .pa_out    (cia2_pa_out),
   .ddra      (cia2_ddra),
-  .pb_in     (8'h00),
-  .pb_out    (),
-  .ddrb      (),
+  .pb_in     (cia2_pb_in),
+  .pb_out    (cia2_pb_out),
+  .ddrb      (cia2_ddrb),
   .sp_in     (1'b1),
   .sp_out    (),
   .cnt_in    (1'b1),
   .cnt_out   (),
-  .flag_n    (1'b1),
-  .pc_n      (),
+  .flag_n    (cia2_flag_n),
+  .pc_n      (cia2_pc_n),
   .irq       (cia2_irq),
   .tod_out   (),
   .tod_in    (cia1_tod_out),
@@ -482,17 +487,17 @@ assign sid_pot_y = joy_pot_y;
 wire tape_act;
 
 c64_tape c64_tape_0 (
-  .clk                  (clk),
-  .reset                (cpu_reset),
-  .phi2_l               (vic_phi2_l),
-  .tap_fifo_rd_data     (tap_fifo_rd_data),
-  .tap_fifo_rd_valid    (tap_fifo_rd_valid),
-  .tap_fifo_rd_en       (tap_fifo_rd_en),
-  .tape_play_toggle     (tape_play_toggle),
-  .cass_sense_n         (tape_cass_sense_n),
-  .cass_read            (cia1_flag_n),
-  .cass_motor_n         (tape_cass_motor_n),
-  .act                  (tape_act)
+  .clk               (clk),
+  .reset             (cpu_reset),
+  .phi2_l            (vic_phi2_l),
+  .tap_fifo_rd_data  (tap_fifo_rd_data),
+  .tap_fifo_rd_valid (tap_fifo_rd_valid),
+  .tap_fifo_rd_en    (tap_fifo_rd_en),
+  .tape_play_toggle  (tape_play_toggle),
+  .cass_sense_n      (tape_cass_sense_n),
+  .cass_read         (cia1_flag_n),
+  .cass_motor_n      (tape_cass_motor_n),
+  .act               (tape_act)
 );
 
 // ---------------------------------------------------------------------------
@@ -509,8 +514,14 @@ wire c1541_iec_clk_out;
 wire c1541_iec_data_in;
 wire c1541_iec_clk_in;
 
+wire  [7:0] c1541_par_data_in;
+wire        c1541_par_stb_in;
+wire  [7:0] c1541_par_data_out;
+wire        c1541_par_stb_out;
+reg         c1541_ext_en;
+
 wire        c1541_rom_en;
-wire [13:0] c1541_rom_addr;
+wire [14:0] c1541_rom_addr;
 reg   [7:0] c1541_rom_dout;
 
 wire [12:0] buff_addr;
@@ -536,6 +547,11 @@ c64_c1541 #(
   .iec_clk_i    (c1541_iec_clk_out),
   .iec_data_o   (c1541_iec_data_in),
   .iec_clk_o    (c1541_iec_clk_in),
+  .par_data_i   (c1541_par_data_out),
+  .par_stb_i    (c1541_par_stb_out),
+  .par_data_o   (c1541_par_data_in),
+  .par_stb_o    (c1541_par_stb_in),
+  .ext_en       (c1541_ext_en),
   .block_lba    (block_lba),
   .block_cnt    (block_cnt),
   .block_rd     (block_rd),
@@ -551,24 +567,37 @@ c64_c1541 #(
   .ext_rom_dout (c1541_rom_dout)
 );
 
-assign drive_rom_en   = c1541_rom_en;
-assign drive_rom_addr = c1541_rom_addr[13:2];
+always @(posedge clk) begin
+  if (c1541_ext_en)
+    // adjust 32KiB ROM address to 24KiB SRAM address
+    drive_rom_addr <= (c1541_rom_addr[14:2] - 13'h800);
+  else
+    drive_rom_addr <= {1'b0, c1541_rom_addr[13:2]};
+
+  drive_rom_en <= c1541_rom_en;
+end
 
 always @(*) begin
-  case (c1541_rom_addr[1:0])
-    2'b00: begin
-      c1541_rom_dout = drive_rom_dout[7:0];
-    end
-    2'b01: begin
-      c1541_rom_dout = drive_rom_dout[15:8];
-    end
-    2'b10: begin
-      c1541_rom_dout = drive_rom_dout[23:16];
-    end
-    2'b11: begin
-      c1541_rom_dout = drive_rom_dout[31:24];
-    end
-  endcase
+  if (c1541_ext_en && c1541_rom_addr < 15'h2000)
+    // first 8192 bytes for DolphinDOS are set to 0xFF
+    c1541_rom_dout = 8'hff;
+
+  else begin
+    case (c1541_rom_addr[1:0])
+      2'b00: begin
+        c1541_rom_dout = drive_rom_dout[7:0];
+      end
+      2'b01: begin
+        c1541_rom_dout = drive_rom_dout[15:8];
+      end
+      2'b10: begin
+        c1541_rom_dout = drive_rom_dout[23:16];
+      end
+      2'b11: begin
+        c1541_rom_dout = drive_rom_dout[31:24];
+      end
+    endcase
+  end
 end
 
 assign drive_shmem_en   = buff_en;
@@ -700,9 +729,9 @@ reg   [7:0] reu_mem_din;
 reg   [7:0] reu_mem_dout;
 
 wire        reu_mem_we;
-wire        reu_mem_valid;
-wire        reu_mem_ready;
-wire        reu_mem_rvalid;
+reg         reu_mem_valid;
+reg         reu_mem_ready;
+reg         reu_mem_rvalid;
 
 c64_reu c64_reu_0 (
   .clk              (clk),
@@ -748,11 +777,19 @@ end
 // c64_action_replay_0
 // ---------------------------------------------------------------------------
 
-wire [14:0] rom_ar_addr;
+wire [15:0] rom_ar_addr;
 wire        rom_ar_enable;
 reg         rom_ar_ready;
 reg  [7:0]  rom_ar_dout;
 wire        rom_ar_select;
+
+wire [15:0] ram_ar_addr;
+wire        ram_ar_enable;
+reg         ram_ar_we;
+reg         ram_ar_ready;
+reg  [7:0]  ram_ar_dout;
+wire [7:0]  ram_ar_din;
+wire        ram_ar_select;
 
 wire        ar_nmi;
 wire        ar_irq;
@@ -787,7 +824,14 @@ c64_action_replay c64_action_replay_0 (
   .rom_enable    (rom_ar_enable),
   .rom_ready     (rom_ar_ready),
   .rom_dout      (rom_ar_dout),
-  .rom_select    (rom_ar_select)
+  .rom_select    (rom_ar_select),
+  .ram_addr      (ram_ar_addr),
+  .ram_enable    (ram_ar_enable),
+  .ram_we        (ram_ar_we),
+  .ram_ready     (ram_ar_ready),
+  .ram_dout      (ram_ar_dout),
+  .ram_din       (ram_ar_din),
+  .ram_select    (ram_ar_select)
 );
 
 // ---------------------------------------------------------------------------
@@ -933,6 +977,11 @@ c64_bus_arbiter c64_bus_arbiter_0 (
   .cia2_pa_in  (cia2_pa_in),
   .cia2_pa_out (cia2_pa_out),
   .cia2_ddra   (cia2_ddra),
+  .cia2_pb_in  (cia2_pb_in),
+  .cia2_pb_out (cia2_pb_out),
+  .cia2_ddrb   (cia2_ddrb),
+  .cia2_flag_n (cia2_flag_n),
+  .cia2_pc_n   (cia2_pc_n),
 
   .reu_addr (reu_addr),
   .reu_din  (reu_din),
@@ -987,14 +1036,20 @@ c64_bus_arbiter c64_bus_arbiter_0 (
   .c1541_iec_data_in  (c1541_iec_data_in),
   .c1541_iec_clk_in   (c1541_iec_clk_in),
 
+  .c1541_par_data_in  (c1541_par_data_in),
+  .c1541_par_stb_in   (c1541_par_stb_in),
+  .c1541_par_data_out (c1541_par_data_out),
+  .c1541_par_stb_out  (c1541_par_stb_out),
+
   .va_delay              (flags[5]),
-  .iec_master_disconnect (flags[13])
+  .iec_master_disconnect (flags[14])
 );
 
 always @(posedge clk) begin
   if (cpu_reset) begin
     cart_present <= flags[11];
     reu_present  <= flags[12];
+    c1541_ext_en <= flags[13];
   end
 end
 
@@ -1065,18 +1120,19 @@ always @(*) begin
   rom_kernal_ready = 0;
   rom_basic_ready  = 0;
   rom_ar_ready     = 0;
+  ram_ar_ready     = 0;
 
   mem_addr = {3'b000, 16'b0};
 
   mem_cmd_valid = 0;
   mem_cmd_we    = 0;
 
-  mem_cmd_we    = ram_we && ram_select;
   mem_wdata     = {ram_din, ram_din};
   mem_wdata_we  = ram_addr[0] ? 2'b10 : 2'b01;
 
   if (ram_select) begin
     mem_cmd_valid = ram_enable;
+    mem_cmd_we    = ram_we;
     mem_addr      = {3'b000, ram_addr};
     ram_ready     = mem_cmd_ready;
 
@@ -1097,8 +1153,14 @@ always @(*) begin
 
   end else if (rom_ar_select) begin
     mem_cmd_valid = rom_ar_enable;
-    mem_addr      = {3'b100, 1'b0, rom_ar_addr};
+    mem_addr      = {3'b100, rom_ar_addr};
     rom_ar_ready  = mem_cmd_ready;
+
+  end else if (ram_ar_select) begin
+    mem_cmd_valid = ram_ar_enable;
+    mem_cmd_we    = ram_ar_we;
+    mem_addr      = {3'b101, ram_ar_addr};
+    ram_ar_ready  = mem_cmd_ready;
   end
 
   mem_cmd_addr = {SDRAM_BANK, 4'b0000, mem_addr[18:1]};
@@ -1108,6 +1170,7 @@ always @(*) begin
   rom_kernal_dout = mem_raddr_lsb ? mem_rdata[15:8] : mem_rdata[7:0];
   rom_basic_dout  = mem_raddr_lsb ? mem_rdata[15:8] : mem_rdata[7:0];
   rom_ar_dout     = mem_raddr_lsb ? mem_rdata[15:8] : mem_rdata[7:0];
+  ram_ar_dout     = mem_raddr_lsb ? mem_rdata[15:8] : mem_rdata[7:0];
 end
 
 wire mem_rdata_valid_combined;

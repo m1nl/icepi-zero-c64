@@ -43,13 +43,21 @@
 
 #include "main.h"
 
+/* irq_attach is stripped by LTO since our isr_handler bypasses irq_table;
+ * provide a stub that preserves the irq_setie semantics uart_init relies on. */
+int irq_attach(unsigned int irq, isr_t isr) {
+    (void)irq;
+    (void)isr;
+    return (int)irq;
+}
+
 static struct embedded_cli cli;
 
 static FATFS fs;
 
 static volatile int c64_console_active = 0;
 
-static int read_file_to_mem(const char *path, void *dst, size_t size) {
+static int read_file_to_mem(const char *path, void *dst, size_t offset, size_t size) {
     int ret = -1;
     FRESULT res;
     FIL f;
@@ -65,6 +73,15 @@ static int read_file_to_mem(const char *path, void *dst, size_t size) {
     if (res != FR_OK) {
         printf("read_file_to_mem: unable to open file %s", path);
         goto unmount;
+    }
+
+    if (offset != 0) {
+        res = f_lseek(&f, offset);
+
+        if (res != FR_OK) {
+            printf("read_file_to_mem: unable to seek file %s to offset %d", path, offset);
+            goto unmount;
+        }
     }
 
     res = f_read(&f, dst, size, &br);
@@ -240,10 +257,46 @@ static int c64_cart_load(void) {
         return -1;
     }
 
-    ret = read_file_to_mem(C64_AR_PATH, (uint8_t *)C64_AR_BASE, C64_AR_SIZE);
+    ret = read_file_to_mem(C64_AR_PATH, (uint8_t *)C64_AR_BASE, 0, C64_AR_SIZE);
 
     if (ret > 0) {
         printf("c64_cart_load: copied %d bytes from %s into %p\n", ret, C64_AR_PATH, (uint8_t *)C64_AR_BASE);
+    }
+
+    return ret;
+}
+
+static int c64_c1541_load(void) {
+    int ret;
+    FRESULT res;
+    FILINFO fno;
+
+    res = f_mount(&fs, "", 1);
+    if (res != FR_OK) {
+        printf("c64_c1541_load: sdcard mount failed (err %d)\n", res);
+        return -1;
+    }
+
+    uint32_t flags = c64_control_flags_read();
+    const char *c1541_path = (flags & (1 << FLAG_C1541_ROM_EXT)) ? C64_1541_EXT_PATH : C64_1541_PATH;
+
+    res = f_stat(c1541_path, &fno);
+    f_unmount("");
+
+    if (res != FR_OK) {
+        printf("c64_c1541_load: ROM not found in path %s\n", c1541_path);
+        return -1;
+    }
+
+    size_t offset = 0;
+
+    if (fno.fsize > C64_C1541_SIZE)
+        offset = fno.fsize - C64_C1541_SIZE;
+
+    ret = read_file_to_mem(c1541_path, (uint8_t *)C64_C1541_BASE, offset, C64_C1541_SIZE);
+
+    if (ret > 0) {
+        printf("c64_c1541_load: copied %d bytes from %s into %p\n", ret, c1541_path, (uint8_t *)C64_C1541_BASE);
     }
 
     return ret;
@@ -267,6 +320,8 @@ static void c64_init_mem(uint8_t *mem, int size, int pattern) {
     flush_cpu_dcache();
     flush_l2_cache();
 }
+
+static void c64_init(void);
 
 static void c64_reset_cpu(void) {
     int flags = c64_control_flags_read();
@@ -304,6 +359,7 @@ static void help_cmd(void) {
     puts("tape_eject            - Eject TAP file");
     puts("flags                 - Show current flags");
     puts("flag <name> [0|1]     - Set or toggle a flag bit (auto-saved)");
+    puts("init                  - Re-initialize C64 (required for certain flags)");
     puts("reset                 - Reset C64 CPU");
     puts("pause                 - Pause C64 CPU");
     puts("resume                - Resume C64 CPU");
@@ -346,6 +402,8 @@ static void flag_cmd(int argc, char **argv) {
     }
     printf("flag: unknown flag: %s\n", name);
 }
+
+static void c64_init_cmd(void) { c64_init(); }
 
 static void c64_reset_cmd(void) { c64_reset_cpu(); }
 
@@ -556,6 +614,9 @@ static int console_service(void) {
             console_cmd();
             show_prompt = 0;
             break;
+        case COMMAND_C64_INIT:
+            c64_init_cmd();
+            break;
         case COMMAND_C64_RESET:
             c64_reset_cmd();
             break;
@@ -596,7 +657,7 @@ static void alt_callback(char c) {
     }
 }
 
-static int c64_isr(uint32_t pending) {
+static int __attribute__((section(".sramfunc"), noinline)) c64_isr(uint32_t pending) {
     if (pending & EV_OVERLAY) {
         uint32_t flags = c64_control_flags_read();
         flags ^= (1 << FLAG_OVERLAY);
@@ -619,6 +680,8 @@ static void c64_init(void) {
         c64_control_flags_write(flags);
     }
 
+    c64_c1541_load();
+
     c64_reset_cpu();
     c64_control_ev_enable_write(EV_OVERLAY | EV_HID_KEY | EV_RESET_REQ);
 }
@@ -629,7 +692,7 @@ static void c64_disable_overlay(void) {
     c64_control_flags_write(flags);
 }
 
-static void c64_control_isr(void) {
+static void __attribute__((section(".sramfunc"), noinline)) c64_control_isr(void) {
     uint32_t pending = c64_control_ev_pending_read();
     c64_control_ev_pending_write(pending);
 
@@ -638,6 +701,16 @@ static void c64_control_isr(void) {
     c64_isr(pending);
 
     input_isr(pending);
+}
+
+void isr_handler(void);
+void __attribute__((section(".sramfunc"), noinline)) isr_handler(void) {
+    unsigned int irqs = irq_pending() & irq_getmask();
+
+    if (irqs & (1 << UART_INTERRUPT))
+        uart_isr();
+    if (irqs & (1 << C64_CONTROL_INTERRUPT))
+        c64_control_isr();
 }
 
 int main(void) {

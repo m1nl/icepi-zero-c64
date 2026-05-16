@@ -40,7 +40,7 @@ static uint32_t tap_size;
 static volatile int tap_play_running;
 static volatile int tap_play_running_next;
 
-void c64_tape_isr(uint32_t pending) {
+void __attribute__((section(".sramfunc"), noinline)) c64_tape_isr(uint32_t pending) {
     if (pending & EV_TAPE_STOP) {
         tap_play_running_next = 0;
     }

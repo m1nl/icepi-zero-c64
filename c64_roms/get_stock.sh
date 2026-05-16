@@ -2,6 +2,7 @@
 
 rm -f dist/kernal.bin dist/basic.bin dist/char.bin dist/c1541_rom.bin dist/arv6-cl-fix.crt dist/ar6_pal.bin
 
+wget "https://github.com/ytmytm/1541-RAMBOardII/raw/refs/heads/main/rom/DolphinDOS2-Kernal-C64.rom" -O dist/kernal_dd2.bin
 wget "https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c64/kernal.901227-02.bin" -O dist/kernal.bin
 wget "https://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c64/basic.901226-01.bin" -O dist/basic.bin
 
@@ -12,6 +13,8 @@ else
 fi
 
 wget "https://www.zimmers.net/anonftp/pub/cbm/firmware/drives/new/1541/1541-II.251968-03.bin" -O dist/c1541_rom.bin
+wget "https://github.com/ytmytm/1541-RAMBOardII/raw/refs/heads/main/rom/DolphinDOS2-1541-II.bin" -O dist/c1541_rom_ext.bin
+
 wget "https://csdb.dk/release/download.php?id=318187" \
     --header "Cache-Control: no-cache" \
     --header "Pragma: no-cache" \

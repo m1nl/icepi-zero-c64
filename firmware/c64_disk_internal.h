@@ -75,4 +75,19 @@ const uint8_t format_track_18[258] = {
 
     /* Two first bytes of directory sector */
     0x00, 0xFF};
+
+static inline void copy32(void *dst, const void *src, size_t n) {
+    uint32_t *d = (uint32_t *)dst;
+    const uint32_t *s = (const uint32_t *)src;
+    for (size_t i = 0; i < n / 4; i++)
+        d[i] = s[i];
+}
+
+static inline void set32(void *dst, uint8_t value, size_t n) {
+    uint32_t *d = (uint32_t *)dst;
+    const uint32_t s = (value << 24) + (value << 16) + (value << 8) + value;
+    for (size_t i = 0; i < n / 4; i++)
+        d[i] = s;
+}
+
 #endif

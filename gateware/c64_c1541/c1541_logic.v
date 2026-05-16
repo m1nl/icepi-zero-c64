@@ -29,7 +29,7 @@ module c1541_logic #(
 
   output wire [14:0] rom_addr,
   input  wire [ 7:0] rom_data,
-  output wire        rom_cs,
+  output reg         rom_cs,
 
   // parallel bus
   input  wire [7:0] par_data_in,
@@ -53,32 +53,88 @@ module c1541_logic #(
 );
 
 wire [15:0] cpu_a;
+wire [ 7:0] cpu_di;
 wire [ 7:0] cpu_do;
-wire        cpu_rw;
+wire        cpu_rwn;
 wire        cpu_irq_n;
 wire        cpu_so_n;
 
 assign cpu_irq_n = ~(uc1_irq | uc3_irq);
 assign cpu_so_n  = byte_n | ~soe;
 
-wire [ 7:0] ram_do;
+wire [7:0] ram_do;
+reg        ram_cs;
 
-assign rom_addr = cpu_a[14:0];
-assign rom_cs   = cpu_a[15];
+wire [7:0] extram_do;
+reg        extram_cs;
 
-// same decoder as on real HW
-wire [3:0] ls42   = {cpu_a[15], cpu_a[12:10]};
-wire       ram_cs = ls42 == 0 || ls42 == 1;
-wire       uc1_cs = ls42 == 6;
-wire       uc3_cs = ls42 == 7;
+wire [7:0] rom_do;
 
-wire [7:0] cpu_di =
-  !cpu_rw ? cpu_do :
-   ram_cs ? ram_do :
-   uc1_cs ? uc1_do :
-   uc3_cs ? uc3_do :
-   rom_cs ? rom_data :
-   8'hFF;
+wire [7:0] uc1_do;
+wire       uc1_irq;
+reg        uc1_cs;
+
+wire [7:0] uc3_do;
+wire       uc3_irq;
+reg        uc3_cs;
+
+always @(*) begin
+  ram_cs    = 0;
+  uc1_cs    = 0;
+  uc3_cs    = 0;
+  extram_cs = 0;
+  rom_cs    = 0;
+
+  cpu_di = 8'hff;
+
+  case (cpu_a[15:12])
+    4'h0: begin
+      cpu_di = ram_do;
+      ram_cs = 1;
+    end
+    4'h1: begin
+      if (cpu_a[11:8] == 4'h8) begin
+        cpu_di = uc1_do;
+        uc1_cs = 1;
+
+      end else if (cpu_a[11:8] == 4'hc) begin
+        cpu_di = uc3_do;
+        uc3_cs = 1;
+      end
+    end
+    4'h6,
+    4'h7: begin
+      if (ext_en) begin
+        cpu_di    = extram_do;
+        extram_cs = 1;
+      end
+    end
+    4'h8,
+    4'h9: begin
+      if (ext_en) begin
+        cpu_di    = extram_do;
+        extram_cs = 1;
+
+      end else begin
+        cpu_di = rom_do;
+        rom_cs = 1;
+      end
+    end
+    4'ha,
+    4'hb,
+    4'hc,
+    4'hd,
+    4'he,
+    4'hf: begin
+      cpu_di = rom_do;
+      rom_cs = 1;
+    end
+    default: ;
+  endcase
+
+  if (!cpu_rwn)
+    cpu_di = cpu_do;
+end
 
 generate
   if (CPU_MODEL) begin : CPU_6502
@@ -93,22 +149,22 @@ generate
       .addr_out(cpu_a),
       .data_in(cpu_di),
       .data_out(cpu_do),
-      .read_write_n(cpu_rw),
+      .read_write_n(cpu_rwn),
       .interrupt_ack(),
       .pc_out()
     );
   end else begin : CPU_T65
     T65 cpu (
-      .mode(2'b00),
-      .res_n(~reset),
-      .enable(ph2_f),
-      .clk(clk),
-      .rdy(1'b1),
-      .abort_n(1'b1),
-      .irq_n(cpu_irq_n),
-      .nmi_n(1'b1),
-      .so_n(cpu_so_n),
-      .r_w_n(cpu_rw),
+      .Mode(2'b00),
+      .Res_n(~reset),
+      .Enable(ph2_f),
+      .Clk(clk),
+      .Rdy(1'b1),
+      .Abort_n(1'b1),
+      .IRQ_n(cpu_irq_n),
+      .NMI_n(1'b1),
+      .SO_n(cpu_so_n),
+      .R_W_n(cpu_rwn),
       .A(cpu_a),
       .DI(cpu_di),
       .DO(cpu_do)
@@ -116,21 +172,32 @@ generate
   end
 endgenerate
 
+assign rom_addr = cpu_a[14:0];
+assign rom_do   = rom_data;
+
 iecdrv_ram #(
   .DW(8),
   .AW(11)
 ) ram (
   .clk(clk),
-  .enable(ph2_r & ram_cs),
-  .we(~cpu_rw & ram_cs),
+  .we(ph2_r & ~cpu_rwn & ram_cs),
   .addr(cpu_a[10:0]),
   .din(cpu_do),
   .dout(ram_do)
 );
 
+iecdrv_ram #(
+  .DW(8),
+  .AW(13)
+) extram (
+  .clk(clk),
+  .we(ph2_r & ~cpu_rwn & extram_cs),
+  .addr(cpu_a[12:0]),
+  .din(cpu_do),
+  .dout(extram_do)
+);
+
 // UC1 (VIA6522) signals
-wire [7:0] uc1_do;
-wire       uc1_irq;
 wire [7:0] uc1_pa_o;
 wire [7:0] uc1_pa_oe;
 wire       uc1_ca2_o;
@@ -145,8 +212,8 @@ wire       uc1_cb2_oe;
 assign iec_data_out = ~(uc1_pb_o[1] | ~uc1_pb_oe[1]) & ~((uc1_pb_o[4] | ~uc1_pb_oe[4]) ^ ~iec_atn_in);
 assign iec_clk_out  = ~(uc1_pb_o[3] | ~uc1_pb_oe[3]);
 
-assign par_stb_out  = uc1_ca2_o | ~uc1_ca2_oe;
-assign par_data_out = uc1_pa_o | ~uc1_pa_oe;
+assign par_stb_out  = ext_en ? (uc1_ca2_o | ~uc1_ca2_oe) : 1'b1;
+assign par_data_out = ext_en ? (uc1_pa_o | ~uc1_pa_oe)   : 8'hff;
 
 iecdrv_via6522 uc1 (
   .clock(clk),
@@ -155,14 +222,14 @@ iecdrv_via6522 uc1 (
   .reset(reset),
 
   .addr(cpu_a[3:0]),
-  .wen(~cpu_rw & uc1_cs),
-  .ren(cpu_rw & uc1_cs),
+  .wen(~cpu_rwn & uc1_cs),
+  .ren(cpu_rwn & uc1_cs),
   .data_in(cpu_do),
   .data_out(uc1_do),
 
   .port_a_o(uc1_pa_o),
   .port_a_t(uc1_pa_oe),
-  .port_a_i((ext_en ? par_data_in : {7'h7F, tr00_sense_n}) & (uc1_pa_o | ~uc1_pa_oe)),
+  .port_a_i((ext_en ? par_data_in : {7'h7f, tr00_sense_n}) & (uc1_pa_o | ~uc1_pa_oe)),
 
   .port_b_o(uc1_pb_o),
   .port_b_t(uc1_pb_oe),
@@ -186,8 +253,6 @@ iecdrv_via6522 uc1 (
 );
 
 // UC3 (VIA6522) signals
-wire [7:0] uc3_do;
-wire       uc3_irq;
 wire [7:0] uc3_pa_o;
 wire [7:0] uc3_pa_oe;
 wire       uc3_ca2_o;
@@ -216,8 +281,8 @@ iecdrv_via6522 uc3 (
   .reset  (reset),
 
   .addr(cpu_a[3:0]),
-  .wen(~cpu_rw & uc3_cs),
-  .ren(cpu_rw & uc3_cs),
+  .wen(~cpu_rwn & uc3_cs),
+  .ren(cpu_rwn & uc3_cs),
   .data_in(cpu_do),
   .data_out(uc3_do),
 

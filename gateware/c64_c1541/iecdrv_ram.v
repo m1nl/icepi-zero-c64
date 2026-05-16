@@ -20,13 +20,10 @@
 `default_nettype none
 `timescale 1 ns / 1 ps
 module iecdrv_ram #(
-  parameter AW      = 10,
-  parameter DW      = 32,
-  parameter PATTERN = 0,
-  parameter DELAY   = 0
+  parameter AW = 10,
+  parameter DW = 32
 ) (
   input  wire clk,
-  input  wire enable,
   input  wire we,
 
   input  wire [AW-1:0] addr,
@@ -38,55 +35,13 @@ localparam integer DEPTH = (1<<AW);
 
 reg [DW-1:0] mem[0:DEPTH-1];
 
-generate
-  if (PATTERN) begin
-    integer i;
-    initial begin
-      mem[0] = {DW{1'b0}};
-      mem[1] = {DW{1'b0}};
-
-      for (i = 2; i < DEPTH; i = i + 1) begin
-        if (((i - 2) % 8) < 4)
-          mem[i] = {DW{1'b1}};
-        else
-          mem[i] = {DW{1'b0}};
-      end
-    end
-  end
-endgenerate
-
-generate
-  if (DELAY == 0) begin
-    // No delay - original behavior
-    always @(posedge clk)
-      if (enable)
-        if (we)
-          mem[addr] <= din;
-        else
-          dout <= mem[addr];
-
-  end else begin
-    // SRAM delay implementation with single counter
-    reg [$clog2(DELAY)-1:0] delay_counter;
-    reg [AW-1:0] latched_addr;
-
-    // SRAM-like behavior with delay
-    always @(posedge clk) begin
-      if (enable) begin
-        latched_addr <= addr;
-
-        if (we)
-          mem[addr] <= din;
-        else if (addr != latched_addr) begin
-          delay_counter <= DELAY - 1;
-        end else if (delay_counter > 0) begin
-          delay_counter <= delay_counter - 1;
-        end else
-          dout <= mem[latched_addr];
-      end
-    end
-  end
-endgenerate
+always @(posedge clk) begin
+  if (we) begin
+    mem[addr] <= din;
+    dout      <= din;
+  end else
+    dout <= mem[addr];
+end
 
 endmodule
 `default_nettype wire

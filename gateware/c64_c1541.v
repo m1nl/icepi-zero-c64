@@ -42,6 +42,12 @@ module c64_c1541 #(
   output wire        iec_data_o,
   output wire        iec_clk_o,
 
+  input  wire  [7:0] par_data_i,
+  input  wire        par_stb_i,
+  output wire  [7:0] par_data_o,
+  output wire        par_stb_o,
+  input  wire        ext_en,
+
   output wire [31:0] block_lba,
   output wire  [5:0] block_cnt,
   output wire        block_rd,
@@ -55,7 +61,7 @@ module c64_c1541 #(
   output wire        buff_en,
 
   output wire        ext_rom_en,
-  output wire [13:0] ext_rom_addr,
+  output wire [14:0] ext_rom_addr,
   input  wire  [7:0] ext_rom_dout
 );
 
@@ -101,13 +107,13 @@ wire        rom_cs;
 generate
   if (EXTERNAL_ROM == 0) begin
     iecdrv_rom #(
-      .AW(14),
+      .AW(15),
       .DW(8),
       .MEM_INIT_FILE("mem/c1541_rom_251968_03.mem")
     ) rom (
       .clk(clk),
       .enable(clk_r && rom_cs),
-      .addr(rom_addr[13:0]),
+      .addr(rom_addr[14:0]),
       .dout(rom_dout)
     );
 
@@ -151,7 +157,11 @@ c1541_drv c1541_drv (
   .iec_data_o(iec_data),
   .iec_clk_o(iec_clk),
 
-  .ext_en(1'b0),
+  .par_data_i(par_data_i),
+  .par_stb_i(par_stb_i),
+  .par_data_o(par_data_o),
+  .par_stb_o(par_stb_o),
+  .ext_en(ext_en),
 
   .rom_addr(rom_addr),
   .rom_data(rom_dout),

@@ -194,7 +194,7 @@ class BaseSoC(SoCCore):
                 )
 
         # Block device shared memory ---------------------------------------------------------------
-        drive_shmem_size = 8192
+        drive_shmem_size = 8 * 1024
         drive_shmem_bus = wishbone.Interface(
             data_width=self.bus.data_width, address_width=self.bus.address_width, bursting=self.bus.bursting
         )
@@ -204,12 +204,10 @@ class BaseSoC(SoCCore):
             slave=self.drive_shmem.bus,
             region=SoCRegion(origin=self.mem_map["drive_shmem"], size=drive_shmem_size, mode="rw"),
         )
-        self.drive_shmem_port = self.drive_shmem.mem.get_port(
-            has_re=False, write_capable=True, we_granularity=8, mode=WRITE_FIRST
-        )
+        self.drive_shmem_port = self.drive_shmem.mem.get_port(has_re=False, write_capable=True, we_granularity=8)
 
         # 1541 drive ROM ---------------------------------------------------------------------------
-        drive_rom_size = 16384
+        drive_rom_size = 24 * 1024
         drive_rom_bus = wishbone.Interface(
             data_width=self.bus.data_width, address_width=self.bus.address_width, bursting=self.bus.bursting
         )
@@ -219,9 +217,7 @@ class BaseSoC(SoCCore):
             slave=self.drive_rom.bus,
             region=SoCRegion(origin=self.mem_map["drive_rom"], size=drive_rom_size, mode="rw"),
         )
-        self.drive_rom_port = self.drive_rom.mem.get_port(
-            has_re=False, write_capable=False, mode=WRITE_FIRST
-        )  # mode has to be the same as the other port
+        self.drive_rom_port = self.drive_rom.mem.get_port(has_re=False, write_capable=False)
 
         # Tape player DMA --------------------------------------------------------------------------
         tap_dma_bus = wishbone.Interface(data_width=self.bus.data_width, address_width=self.bus.address_width, mode="r")

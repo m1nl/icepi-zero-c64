@@ -102,6 +102,11 @@ module c64_bus_arbiter (
   output wire [7:0]  cia2_pa_in,
   input  wire [7:0]  cia2_pa_out,
   input  wire [7:0]  cia2_ddra,
+  output wire [7:0]  cia2_pb_in,
+  input  wire [7:0]  cia2_pb_out,
+  input  wire [7:0]  cia2_ddrb,
+  output wire        cia2_flag_n,
+  input  wire        cia2_pc_n,
 
   output reg  [3:0]  reu_addr,
   output reg  [7:0]  reu_din,
@@ -157,6 +162,11 @@ module c64_bus_arbiter (
 
   input  wire        c1541_iec_data_in,
   input  wire        c1541_iec_clk_in,
+
+  input  wire [7:0]  c1541_par_data_in,
+  input  wire        c1541_par_stb_in,
+  output wire [7:0]  c1541_par_data_out,
+  output wire        c1541_par_stb_out,
 
   input  wire        va_delay,
   input  wire        iec_master_disconnect
@@ -293,7 +303,16 @@ assign cia2_iec_clk_out  = iec_clk || iec_master_disconnect;
 assign cia2_pa_in = {cia2_iec_data_out, cia2_iec_clk_out,
   (~cia2_ddra[5:3] | cia2_pa_out[5:3]), (~cia2_ddra[2:0] | cia2_pa_out[2:0])};
 
+// parallel port
+
+assign c1541_par_data_out = (~cia2_ddrb | cia2_pb_out);
+assign c1541_par_stb_out  = cia2_pc_n;
+
+assign cia2_pb_in  = c1541_par_data_in;
+assign cia2_flag_n = c1541_par_stb_in;
+
 // bus logic
+
 reg [15:0] bus_addr;
 reg        bus_we;
 

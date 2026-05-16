@@ -17,8 +17,18 @@ SECTIONS
 		KEEP(*(.text.isr))
 
 		*(.text .stub .text.* .gnu.linkonce.t.*)
+		. = ALIGN(4);
 		_etext = .;
 	} > main_ram
+
+	.text_sram :
+	{
+		. = ALIGN(4);
+		_ftext_sram = .;
+		KEEP(*(.sramfunc))
+		. = ALIGN(4);
+		_etext_sram = .;
+	} > sram AT > main_ram
 
 	.rodata :
 	{
@@ -61,9 +71,12 @@ SECTIONS
 }
 
 _heap_base = _ftext + 100K;
-_heap_end  = _heap_base + 8M;
+_heap_end  = _ftext + 8M;
 
 PROVIDE(_fstack = ORIGIN(sram) + LENGTH(sram));
+
+PROVIDE(_ftext_sram_rom = LOADADDR(.text_sram));
+PROVIDE(_etext_sram_rom = LOADADDR(.text_sram) + SIZEOF(.text_sram));
 
 PROVIDE(_fdata_rom = LOADADDR(.data));
 PROVIDE(_edata_rom = LOADADDR(.data) + SIZEOF(.data));

@@ -16,6 +16,20 @@ from litex.soc.interconnect import stream
 from migen import *
 
 
+def next_power_sum_of_two(x: int) -> int:
+    best = None
+    limit = x.bit_length() + 2
+
+    for i in range(limit):
+        for j in range(i + 1):
+            val = (1 << i) + (1 << j)
+            if val >= x:
+                if best is None or val < best:
+                    best = val
+
+    return best
+
+
 def import_bdf_font(filename):
     import csv
 
@@ -160,10 +174,10 @@ class VideoTerminalOverlay(LiteXModule):
         # Terminal Mem.
         # -------------
         term_columns = int(min(math.floor(hres / font_width), 128))  # 128 is max when using 7 bits for x_term
-        term_columns_2 = int(2 ** math.ceil(math.log2(term_columns)))  # next power of two bigger or equal term_columns
+        term_columns_2 = next_power_sum_of_two(term_columns)
         term_lines = int(min(math.floor(vres / font_height), 64))  # 64 is max when using 6 bits for y_term
         term_depth = term_columns_2 * term_lines
-        term_init = [ord(c) for c in [" "] * term_columns_2 * term_lines]
+        term_init = [ord(c) for c in [" "] * term_depth]
         term_mem = Memory(width=font_width + csi_width, depth=term_depth, init=term_init)
         term_wrport = term_mem.get_port(write_capable=True)
         term_rdport = term_mem.get_port(has_re=True)
@@ -187,7 +201,7 @@ class VideoTerminalOverlay(LiteXModule):
         x_term_i = Signal(7)
         y_term = Signal(6)
         y_term_rollover = Signal()
-        self.comb += term_wrport.adr.eq(x_term | (y_term << 7))
+        self.comb += term_wrport.adr.eq(x_term + (y_term * term_columns_2))
         self.uart_fsm = uart_fsm = FSM(reset_state="RESET")
         uart_fsm.act("RESET", NextValue(x_term, 0), NextValue(x_term_i, 0), NextValue(y_term, 0), NextState("CLEAR-XY"))
         uart_fsm.act(
