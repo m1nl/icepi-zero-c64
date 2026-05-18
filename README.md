@@ -205,6 +205,7 @@ The `flag <name> [0|1]` command (and the persisted JSON file) operate on the fol
 | `joy_emulation_1`       | Same as above, but for joystick port 2.                                                                       |
 | `cart_present`          | Indicates that a cartridge is present; ignored if `/c64_roms/ar6_pal.bin` is not present upon reboot          |
 | `reu_present`           | Indicates that 4MiB REU is present; changes to this flag require `reset` to take effect   .                   |
+| `c1541_rom_ext`         | Extended C1541 ROM (DolphinDOS)                                                                               |
 | `iec_master_disconnect` | Disconnects the C64 from the virtual IEC bus.                                                                 |
 
 ## REU support
@@ -214,6 +215,10 @@ The core includes 4 MiB REU support, which is enabled whenever the `reu_present`
 - Sonic the Hedgehog (https://csdb.dk/release/?id=212523)
 - TreuLove (https://csdb.dk/release/?id=144105)
 - fREUd (https://csdb.dk/release/?id=149560)
+
+## DolphinDOS support
+
+DolphinDOS support requires additional ROM image to be present on the SD card (`/c64_roms/c1541_rom_ext.bin`) and `c1541_rom_ext` flag has to be enabled. Please keep in mind that this flag only activates DolphinDOS C1541 extension and `kernal.bin` ROM has to be replaced separately with a version supporting parallel port for communication. ROM downloader stores it as `kernal_dd2.bin` for your convenience. Simply replace `kernal.bin` with `kernal_dd2.bin` to enable it.
 
 ## Note on AI usage
 
