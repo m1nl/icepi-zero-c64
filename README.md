@@ -133,7 +133,7 @@ The following host-keyboard keys are intercepted by the gateware (see `gateware/
 | ----------------- | ----------------------------------------------------------------------- |
 | `Print Screen`    | Toggle the on-screen firmware overlay (same as serial console)          |
 | `Pause` / `Break` | Reset the C64 CPU                                                       |
-| `F12`             | Trigger Action Replay cartridge freeze                                  |
+| `F12`             | Trigger Action Replay / Retro Replay cartridge freeze                   |
 | `Escape`          | Run/Stop + Restore (NMI, via USB HID); also Run/Stop on PS/2            |
 | `Tab`             | Restore (NMI) on USB HID                                                |
 | `Shift` + `-`     | Tape play trigger                                                       |
@@ -203,14 +203,14 @@ The `flag <name> [0|1]` command (and the persisted JSON file) operate on the fol
 | `joy_button_space`      | Maps the gamepad's second fire button to the `Space` key (useful for games using Space as a secondary fire).  |
 | `joy_emulation_0`       | Allows using the host keyboard as joystick port 1 (cursor keys + `F`/`Space` for fire).                       |
 | `joy_emulation_1`       | Same as above, but for joystick port 2.                                                                       |
-| `cart_present`          | Indicates that a cartridge is present; ignored if `/c64_roms/ar6_pal.bin` is not present upon reboot          |
+| `cart_present`          | Indicates that AR / RR cartridge is present; ignored if `/c64_roms/ar6_pal.bin` is not present upon reboot    |
 | `reu_present`           | Indicates that 4MiB REU is present; changes to this flag require `reset` to take effect   .                   |
 | `c1541_rom_ext`         | Extended C1541 ROM (DolphinDOS)                                                                               |
 | `iec_master_disconnect` | Disconnects the C64 from the virtual IEC bus.                                                                 |
 
 ## REU support
 
-The core includes 4 MiB REU support, which is enabled whenever the `reu_present` flag is set. Since AR IO2 conflicts with REU registers, some additional arbitration logic is used to handle access to $DF00–$DFFF when both `cart_present` and `reu_present` flags are enabled. If you encounter any issues, please disable one of the flags, as REU is generally not compatible with the AR cartridge. The REU implementation has been validated and confirmed to work with the following programs:
+The core includes 4 MiB REU support, which is enabled whenever the `reu_present` flag is set. Since AR IO2 conflicts with REU registers, some additional arbitration logic is used to handle access to $DF00–$DFFF when both `cart_present` and `reu_present` flags are enabled. If you encounter any issues, please disable one of the flags or switch to Retro Replay - `rr6_pal.bin` or `rr6_pal_reu.bin`, both are REU-compatible and the latter uses REU for built-in assembler. The REU implementation has been validated and confirmed to work with the following programs:
 - memtest (does not work when AR is enabled; https://csdb.dk/release/?id=157941)
 - Sonic the Hedgehog (https://csdb.dk/release/?id=212523)
 - TreuLove (https://csdb.dk/release/?id=144105)

@@ -803,7 +803,6 @@ c64_action_replay c64_action_replay_0 (
   .reset         (cpu_reset),
   .phi2_p        (vic_phi2_p && !vic_stall),
   .phi2_h        (vic_phi2_h),
-  .phi2_n        (vic_phi2_n && !vic_stall),
   .addr          (cart_addr),
   .din           (cart_din),
   .dout          (cart_dout),

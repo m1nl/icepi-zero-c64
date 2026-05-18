@@ -249,18 +249,18 @@ static int c64_cart_load(void) {
         return -1;
     }
 
-    res = f_stat(C64_AR_PATH, &fno);
+    res = f_stat(C64_AR_ROM_PATH, &fno);
     f_unmount("");
 
     if (res != FR_OK) {
-        printf("c64_cart_load: cartridge ROM not found in path %s\n", C64_AR_PATH);
+        printf("c64_cart_load: cartridge ROM not found in path %s\n", C64_AR_ROM_PATH);
         return -1;
     }
 
-    ret = read_file_to_mem(C64_AR_PATH, (uint8_t *)C64_AR_BASE, 0, C64_AR_SIZE);
+    ret = read_file_to_mem(C64_AR_ROM_PATH, (uint8_t *)C64_AR_ROM_BASE, 0, C64_AR_ROM_SIZE);
 
     if (ret > 0) {
-        printf("c64_cart_load: copied %d bytes from %s into %p\n", ret, C64_AR_PATH, (uint8_t *)C64_AR_BASE);
+        printf("c64_cart_load: copied %d bytes from %s into %p\n", ret, C64_AR_ROM_PATH, (uint8_t *)C64_AR_ROM_BASE);
     }
 
     return ret;
@@ -331,6 +331,10 @@ static void c64_reset_cpu(void) {
     busy_wait(1);
 
     c64_init_mem((uint8_t *)C64_RAM_BASE, C64_RAM_SIZE, !cart_present);
+    if (cart_present) {
+        c64_init_mem((uint8_t *)C64_AR_RAM_BASE, C64_AR_RAM_SIZE, 0);
+    }
+
     busy_wait(1);
 
     c64_control_cpu_reset_req_write(0);

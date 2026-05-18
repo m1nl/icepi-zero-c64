@@ -22,5 +22,17 @@ wget "https://csdb.dk/release/download.php?id=318187" \
     --header "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36" \
     -O dist/arv6-cl-fix.crt
 
+wget "https://csdb.dk/release/download.php?id=243774" \
+    --header "Cache-Control: no-cache" \
+    --header "Pragma: no-cache" \
+    --header "Referer: https://csdb.dk/release/?id=258640" \
+    --header "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36" \
+    -O dist/rr38p-tmp12-patched.zip
+
 python3 ar_extract.py dist/arv6-cl-fix.crt dist/ar6_pal.bin
 rm -f dist/arv6-cl-fix.crt
+
+unzip -j dist/rr38p-tmp12-patched.zip rr38p-tmp12-patched/rr38p-tmp12.bin rr38p-tmp12-patched/rr38p-tmp12reu.bin
+rm -f dist/rr38p-tmp12-patched.zip
+mv rr38p-tmp12.bin dist/rr6_pal.bin
+mv rr38p-tmp12reu.bin dist/rr6_pal_reu.bin

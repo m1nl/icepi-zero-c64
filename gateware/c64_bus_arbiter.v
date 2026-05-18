@@ -691,10 +691,13 @@ always @(*) begin
             if (cart_flags[2] || !cart_flags[5])
               // 5    1 = enable RAM at ROML ($8000-$9FFF) & I/O2 ($DF00-$DFFF = $9F00-$9FFF)
               // 2    1 = disable cartridge (turn off $DE00)
-              // REU override is set when bus is written and 1) cartridge is disabled or 2) ROM is mapped to $DF00-$DFFF
+              // REU override is set when bus is written and:
+              // 1) cartridge is disabled or
+              // 2) ROM is mapped to $DF00-$DFFF
               reu_cen = 1'b0;
             else
               cart_io2_cen = 1'b0;
+
           end else if (reu_override)
             reu_cen = 1'b0;
           else
