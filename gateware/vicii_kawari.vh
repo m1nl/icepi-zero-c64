@@ -34,12 +34,14 @@
 
 `define RAS_CAS_CUSTOM 1
 
+// No need to change RAS / CAS on negedge for FPGA emulation
+`define RAS_CAS_IGNORE_NEGEDGE 1
+
 // PAL CAS/RAS rise/fall times based on PAL dot4x clock
 `define PAL_RAS_RISE_P 15
 `define PAL_RAS_RISE_N 0
 `define PAL_CAS_RISE_P 15
 `define PAL_CAS_RISE_N 0
-
 `define PAL_RAS_FALL_P 3
 `define PAL_RAS_FALL_N 3
 `define PAL_MUX_COL 4
