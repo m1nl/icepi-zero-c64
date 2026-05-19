@@ -87,30 +87,20 @@ always @(*) begin
 
   cpu_di = 8'hff;
 
-  case (cpu_a[15:12])
-    4'h0: begin
+  casez (cpu_a[15:10])
+    6'b0zz00z: begin
       cpu_di = ram_do;
       ram_cs = 1;
     end
-    4'h1: begin
-      if (cpu_a[11:8] == 4'h8) begin
-        cpu_di = uc1_do;
-        uc1_cs = 1;
-
-      end else if (cpu_a[11:8] == 4'hc) begin
-        cpu_di = uc3_do;
-        uc3_cs = 1;
-      end
+    6'b0zz110: begin
+      cpu_di = uc1_do;
+      uc1_cs = 1;
     end
-    4'h6,
-    4'h7: begin
-      if (ext_en) begin
-        cpu_di    = extram_do;
-        extram_cs = 1;
-      end
+    6'b0zz111: begin
+      cpu_di = uc3_do;
+      uc3_cs = 1;
     end
-    4'h8,
-    4'h9: begin
+    6'b100zzz: begin
       if (ext_en) begin
         cpu_di    = extram_do;
         extram_cs = 1;
@@ -120,12 +110,7 @@ always @(*) begin
         rom_cs = 1;
       end
     end
-    4'ha,
-    4'hb,
-    4'hc,
-    4'hd,
-    4'he,
-    4'hf: begin
+    6'b1zzzzz: begin
       cpu_di = rom_do;
       rom_cs = 1;
     end
