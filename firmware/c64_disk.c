@@ -408,7 +408,13 @@ int c64_disk_format(const char *path, const char *label) {
     return 0;
 }
 
-void c64_disk_init(void) { c64_control_ev_enable_write(c64_control_ev_enable_read() | EV_BLOCK_RD | EV_BLOCK_WR); }
+void c64_disk_init(void) {
+    uint8_t *dst = (uint8_t *)&_fdrive_shmem;
+    uint32_t buf_size = (uint32_t)(&_edrive_shmem - &_fdrive_shmem);
+    memset(dst, 0, buf_size);
+
+    c64_control_ev_enable_write(c64_control_ev_enable_read() | EV_BLOCK_RD | EV_BLOCK_WR);
+}
 
 int c64_disk_service(void) {
     if (d64_dirty) {

@@ -676,6 +676,9 @@ static int __attribute__((section(".sramfunc"), noinline)) c64_isr(uint32_t pend
 }
 
 static void c64_init(void) {
+    c64_control_cpu_reset_req_write(1);
+    busy_wait(1);
+
     c64_flags_load();
 
     if (c64_cart_load() < 0) {
@@ -687,7 +690,7 @@ static void c64_init(void) {
     c64_c1541_load();
 
     c64_reset_cpu();
-    c64_control_ev_enable_write(EV_OVERLAY | EV_HID_KEY | EV_RESET_REQ);
+    c64_control_ev_enable_write(c64_control_ev_enable_read() | EV_OVERLAY | EV_HID_KEY | EV_RESET_REQ);
 }
 
 static void c64_disable_overlay(void) {
