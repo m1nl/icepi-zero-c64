@@ -25,8 +25,8 @@ c1541_gcr_tb_top.mtr
 c1541_gcr_tb_top.busy
 @22
 c1541_gcr_tb_top.freq[1:0]
-c1541_gcr_tb_top.track[5:0]
-c1541_gcr_tb_top.disk_id[15:0]
+c1541_gcr_tb_top.track[6:0]
+c1541_gcr_tb_top.img_id[15:0]
 @200
 -Data I/O
 @22
@@ -34,7 +34,6 @@ c1541_gcr_tb_top.dout[7:0]
 c1541_gcr_tb_top.din[7:0]
 @28
 c1541_gcr_tb_top.sync_n
-c1541_gcr_tb_top.sync_cnt[5:0]
 c1541_gcr_tb_top.byte_n
 @200
 -Buffer Interface
@@ -48,32 +47,33 @@ c1541_gcr_tb_top.buff_en
 @200
 -Internal State
 @28
-c1541_gcr_tb_top.c1541_gcr_inst.state
 c1541_gcr_tb_top.c1541_gcr_inst.stall
-c1541_gcr_tb_top.c1541_gcr_inst.nibble
-c1541_gcr_tb_top.c1541_gcr_inst.sync_in_n
-c1541_gcr_tb_top.c1541_gcr_inst.bit_clk_en
-c1541_gcr_tb_top.c1541_gcr_inst.authorize_write
+c1541_gcr_tb_top.c1541_gcr_inst.half_track
+c1541_gcr_tb_top.c1541_gcr_inst.header_done
 c1541_gcr_tb_top.c1541_gcr_inst.sector_done
-c1541_gcr_tb_top.c1541_gcr_inst.byte_ready
-c1541_gcr_tb_top.c1541_gcr_inst.byte_ready_r
 @22
-c1541_gcr_tb_top.c1541_gcr_inst.data[7:0]
 c1541_gcr_tb_top.c1541_gcr_inst.sector[4:0]
 c1541_gcr_tb_top.c1541_gcr_inst.byte_cnt[8:0]
-c1541_gcr_tb_top.c1541_gcr_inst.bit_cnt[2:0]
-c1541_gcr_tb_top.c1541_gcr_inst.gcr_bit_cnt[2:0]
-c1541_gcr_tb_top.c1541_gcr_inst.sync_cnt[5:0]
-c1541_gcr_tb_top.c1541_gcr_inst.bit_clk_cnt[5:0]
-c1541_gcr_tb_top.c1541_gcr_inst.byte_n_cnt[6:0]
+c1541_gcr_tb_top.c1541_gcr_inst.sync_bits[5:0]
+c1541_gcr_tb_top.c1541_gcr_inst.gcr_bit_idx[3:0]
 @200
 -GCR Data
 @22
 c1541_gcr_tb_top.c1541_gcr_inst.data[7:0]
-c1541_gcr_tb_top.c1541_gcr_inst.data_cks[7:0]
-c1541_gcr_tb_top.c1541_gcr_inst.gcr_byte[7:0]
-c1541_gcr_tb_top.c1541_gcr_inst.gcr_nibble[4:0]
-c1541_gcr_tb_top.c1541_gcr_inst.gcr_nibble_out[4:0]
-c1541_gcr_tb_top.c1541_gcr_inst.nibble_out[3:0]
+c1541_gcr_tb_top.c1541_gcr_inst.data_chksum[7:0]
+c1541_gcr_tb_top.c1541_gcr_inst.gcr_word[9:0]
+c1541_gcr_tb_top.c1541_gcr_inst.gcr_nibble_in[4:0]
+c1541_gcr_tb_top.c1541_gcr_inst.gcr_nibble_dec[3:0]
+@200
+-Flux and Clock Recovery
+@28
+c1541_gcr_tb_top.c1541_gcr_inst.flux_rev
+@22
+c1541_gcr_tb_top.c1541_gcr_inst.flux_gap[9:0]
+c1541_gcr_tb_top.c1541_gcr_inst.rx_shreg[9:0]
+c1541_gcr_tb_top.c1541_gcr_inst.rx_bit_cnt[2:0]
+c1541_gcr_tb_top.c1541_gcr_inst.gcr_cnt[5:0]
+c1541_gcr_tb_top.c1541_gcr_inst.pll_cnt[3:0]
+c1541_gcr_tb_top.c1541_gcr_inst.pll_phase[3:0]
 [pattern_trace] 1
 [pattern_trace] 0

@@ -18,7 +18,7 @@ module c1541_gcr_tb_top (
   input wire        busy,
   input wire        img_mounted,
 
-  input wire [15:0] disk_id,
+  input wire [15:0] img_id,
 
   output wire [12:0] buff_addr,
   input  wire [7:0]  buff_dout,
@@ -42,7 +42,7 @@ c1541_gcr c1541_gcr_inst (
   .busy(busy),
   .img_mounted(img_mounted),
   .wps_n(wps_n),
-  .disk_id(disk_id),
+  .img_id(img_id),
   .buff_addr(buff_addr),
   .buff_dout(buff_dout),
   .buff_din(buff_din),

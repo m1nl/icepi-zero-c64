@@ -93,7 +93,7 @@ always @(posedge clk) begin
   end else if (!block_wr && !block_rd) begin
     save_track_r <= save_track;
 
-    if ((save_track_r != save_track) && !(&track[6:1])) begin
+    if (save_track_r != save_track) begin
       len      <= start_sectors[track_current + 1] - start_sectors[track_current];
       lba      <= start_sectors[track_current];
       block_wr <= 1;

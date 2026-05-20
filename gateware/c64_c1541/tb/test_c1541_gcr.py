@@ -18,7 +18,7 @@ async def test_c1541_gcr_basic(dut):
     dut.busy.value = 0
     dut.wps_n.value = 1
     dut.img_mounted.value = 0
-    dut.disk_id.value = 0xAB
+    dut.img_id.value = 0xAB
 
     dut.buff_dout.value = 0xDE
 
@@ -37,6 +37,7 @@ async def test_c1541_gcr_basic(dut):
 
         if count == 9300:
             dut.din.value = 0x55
+        #           dut.mode.value = 0
         if count == 10500:
             dut.din.value = 0xFB
         if count == 380000:
