@@ -343,10 +343,10 @@ always @(*) begin
 
   if (cpu_reset || vic_reset) begin
     /* no-op */
-  end else if (cpu_we && vic_aec)
-    bus = cpu_dout;
-  else if (reu_dma_we && reu_dma_active && vic_aec)
+  end else if (reu_dma_we && reu_dma_active && vic_aec)
     bus = reu_dout;
+  else if (cpu_we && !reu_dma_active && vic_aec)
+    bus = cpu_dout;
   else if (rom_basic_select)
     bus = rom_basic_dout;
   else if (rom_kernal_select)
@@ -392,7 +392,7 @@ assign cart_ba = vic_ba && cart_present;
 // address decoding
 
 always @(*) begin
-  if (reu_dma_active && !cpu_we) begin
+  if (reu_dma_active) begin
     bus_addr = reu_dma_addr;
     bus_we   = reu_dma_we;
     ram_din  = reu_dout;
