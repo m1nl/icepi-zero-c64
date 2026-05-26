@@ -40,6 +40,7 @@ static volatile uint8_t hid_modifiers = 0;
 
 static volatile uint8_t hid_control_state = 0;
 static volatile char hid_control_pending[10];
+static volatile int8_t hid_fkey_pending = -1;
 
 static volatile uint8_t alt_callback_pending = 0;
 
@@ -74,6 +75,12 @@ static uint8_t hid_keycode_to_ascii(uint8_t keycode, uint8_t modifiers) {
     return shift ? hid_to_ascii_shift[keycode] : hid_to_ascii[keycode];
 }
 
+static int8_t hid_keycode_to_fkey(uint8_t keycode) {
+    if (keycode >= 0x3A && keycode <= 0x45)
+        return keycode - 0x3A;
+    return -1;
+}
+
 static uint8_t hid_keycode_to_control(uint8_t keycode, uint8_t modifiers) {
     switch (keycode) {
         case 0x51:
@@ -94,6 +101,22 @@ static void write_ps2(char c) {
 #define PS2_E0 0xE0
 #define PS2_SHIFT 0x12
 #define PS2_CTRL 0x14
+
+static const uint8_t fkey_ps2[12] = {
+    0x05, 0x06, 0x04, 0x0C, // F1-F4
+    0x03, 0x0B, 0x83, 0x0A, // F5-F8
+    0x01, 0x09, 0x78, 0x07, // F9-F12
+};
+
+static void send_ps2_fkey(int n) {
+    if (n < 0 || n > 11)
+        return;
+    uint8_t scan = fkey_ps2[n];
+    write_ps2(scan);
+    busy_wait(10);
+    write_ps2(PS2_F0);
+    write_ps2(scan);
+}
 
 static const uint8_t ascii_to_ps2[128] = {
     0x00, 0x1C, 0x32, 0x21, 0x23, 0x24, 0x2B, 0x34, 0x66, 0x0D, 0x5A, 0x42, 0x4B, 0x5A, 0x31, 0x44, 0x4D, 0x15, 0x2D,
@@ -180,6 +203,15 @@ static void send_ps2_for_char(char c) {
 
 void input_register_alt_callback(void (*callback)(char)) { alt_callback = callback; }
 
+static int vt_num_to_fkey(int num) {
+    switch (num) {
+        case 11: return 0;  case 12: return 1;  case 13: return 2;  case 14: return 3;
+        case 15: return 4;  case 17: return 5;  case 18: return 6;  case 19: return 7;
+        case 20: return 8;  case 21: return 9;  case 23: return 10; case 24: return 11;
+    }
+    return -1;
+}
+
 int c64_console(void) {
     char c;
 
@@ -204,7 +236,24 @@ int c64_console(void) {
             } else if (c3 == 'D') {
                 send_ps2_extended(0x6B);
                 return 0;
+            } else if (c3 >= '0' && c3 <= '9') {
+                int num = c3 - '0';
+                char cx;
+                while ((cx = input_block()) != '~' && cx >= '0' && cx <= '9')
+                    num = num * 10 + (cx - '0');
+                int fkey = vt_num_to_fkey(num);
+                if (fkey >= 0)
+                    send_ps2_fkey(fkey);
+                return 0;
             }
+            if (c3)
+                send_ps2_for_char(c3);
+        } else if (c2 == 'O') {
+            char c3 = input_block();
+            if (c3 == 'P') { send_ps2_fkey(0); return 0; }
+            if (c3 == 'Q') { send_ps2_fkey(1); return 0; }
+            if (c3 == 'R') { send_ps2_fkey(2); return 0; }
+            if (c3 == 'S') { send_ps2_fkey(3); return 0; }
             if (c3)
                 send_ps2_for_char(c3);
         }
@@ -256,6 +305,8 @@ void __attribute__((section(".sramfunc"), noinline)) input_isr(uint32_t pending)
             hid_modifiers = c64_control_hid_key_modifiers_read();
             hid_keycode = keycode;
 
+            int8_t fkey = hid_keycode_to_fkey(keycode);
+
             if (hid_modifiers & HID_MOD_CTRL && ((ascii = hid_keycode_to_ascii(keycode, hid_modifiers)))) {
                 switch (ascii) {
                     case 'c':
@@ -267,6 +318,8 @@ void __attribute__((section(".sramfunc"), noinline)) input_isr(uint32_t pending)
                 }
             } else if (hid_modifiers & HID_MOD_ALT && ((ascii = hid_keycode_to_ascii(keycode, hid_modifiers))))
                 alt_callback_pending = ascii;
+            else if (fkey >= 0)
+                hid_fkey_pending = fkey;
             else if ((ascii = hid_keycode_to_ascii(keycode, hid_modifiers)))
                 hid_ascii_pending = ascii;
             else if ((control = hid_keycode_to_control(keycode, hid_modifiers))) {
@@ -282,6 +335,7 @@ void __attribute__((section(".sramfunc"), noinline)) input_isr(uint32_t pending)
 
 void input_init(void) {
     hid_control_state = 0;
+    hid_fkey_pending = -1;
     memset((void *)hid_control_pending, 0, sizeof(hid_control_pending));
 
     c64_control_ev_enable_write(c64_control_ev_enable_read() | EV_HID_KEY);
@@ -292,6 +346,11 @@ int input_service(void) {
         fputc('\n', stdout);
         alt_callback((char)alt_callback_pending);
         alt_callback_pending = 0;
+        return 1;
+    }
+    if (hid_fkey_pending >= 0) {
+        send_ps2_fkey(hid_fkey_pending);
+        hid_fkey_pending = -1;
         return 1;
     }
     return 0;
