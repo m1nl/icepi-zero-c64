@@ -74,13 +74,14 @@ git submodule update --init
 # Create Python virtual environment
 python3 -m venv venv
 source venv/bin/activate
+python3 -m pip install --upgrade pip setuptools wheel
 
 # Install LiteX
 mkdir litex_src
 cd litex_src
 wget https://raw.githubusercontent.com/enjoy-digital/litex/master/litex_setup.py
 chmod +x litex_setup.py
-./litex_setup.py --init --install
+./litex_setup.py --init --install --tag 2026.04
 cd ..
 ```
 
