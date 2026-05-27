@@ -9,6 +9,7 @@
 # Adapted and modified for Icepi Zero C64 project by m1nl
 
 from litex.build.io import DDROutput
+from litex.build.yosys_wrapper import YosysWrapper
 from litex.gen import *
 from litex.soc.cores.bitbang import I2CMaster
 from litex.soc.cores.clock import *
@@ -97,7 +98,15 @@ class BaseSoC(SoCCore):
         with_spi_flash=True,
         **kwargs,
     ):
+        if toolchain != "trellis":
+            raise ValueError("Only trellis toolchain is supported")
+
         platform = icepi_zero.Platform(device=device, toolchain=toolchain)
+
+        # Customized Yosys build template to support defines ---------------------------------------
+        template = YosysWrapper._default_template
+        template.insert(template.index("{read_files}"), "verilog_defines -DNO_MOS8520")
+        platform.toolchain._yosys_template = template
 
         # CRG --------------------------------------------------------------------------------------
         uart_name = kwargs.get("uart_name", "serial")
@@ -317,8 +326,8 @@ def main():
     soc.add_spi_sdcard()
 
     builder = Builder(soc, **parser.builder_argdict)
+
     if args.build:
-        soc.platform.toolchain._yosys_cmds.append("stat -hierarchy")
         builder.build(**parser.toolchain_argdict)
 
     if args.load:
