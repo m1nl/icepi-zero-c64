@@ -187,24 +187,9 @@ c1541_track c1541_track (
 );
 
 reg [6:0] track_next;
-reg [1:0] move;
-reg [1:0] stp_prev;
 
-always @(*) begin
-  track_next = track;
-  move       = stp - stp_prev;
-
-  if (move[0]) begin
-    if (~move[1] && track < 84)
-      track_next = track + 1;
-    if ( move[1] && track > 0 )
-      track_next = track - 1;
-  end
-end
-
-always @(posedge clk) begin
-  stp_prev <= stp;
-end
+reg track_modified;
+reg save_track;
 
 reg [18:0] read_timer;  // around 524ms with 1us clock enable
 
@@ -215,8 +200,17 @@ always @(posedge clk) begin
     read_timer <= read_timer + 1;
 end
 
-reg track_modified;
-reg save_track;
+always @(*) begin
+  track_next = track;
+
+  case ({track[1:0], stp})
+    4'b0001, 4'b0110, 4'b1011, 4'b1100:
+      if (track < 84) track_next = track + 1;
+    4'b0011, 4'b0100, 4'b1001, 4'b1110:
+      if (track >  0) track_next = track - 1;
+    default: ;
+  endcase
+end
 
 always @(posedge clk) begin
   if (reset) begin
@@ -232,7 +226,7 @@ always @(posedge clk) begin
     if (track_modified || buff_we) begin
       track_modified <= 1;
 
-      if ((track != track_next) || (&read_timer)) begin
+      if (track != track_next || &read_timer) begin
         save_track     <= !save_track;
         track_modified <= 0;
       end

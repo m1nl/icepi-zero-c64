@@ -170,7 +170,7 @@ reg  [9:0] tx_shreg;
 reg  [2:0] tx_bit_cnt;
 
 // --- Track/mode change detection ---
-reg  [6:0] track_num_prev;
+reg  [5:0] track_num_prev;
 reg        mode_prev = 1;
 
 // --- GCR finite state machine
