@@ -91,10 +91,7 @@ static inline void store_lba(uint32_t lba_req, uint32_t cnt) {
         copy_bytes = avail;
 
     copy32(d64_data + offset, src, copy_bytes);
-
     d64_dirty = 1;
-    timer0_uptime_latch_write(1);
-    write_commit_cycles = timer0_uptime_cycles_read() + WRITE_COMMIT_INTERVAL_CYCLES;
 }
 
 void __attribute__((section(".sramfunc"), noinline)) c64_disk_isr(uint32_t pending) {
@@ -107,6 +104,9 @@ void __attribute__((section(".sramfunc"), noinline)) c64_disk_isr(uint32_t pendi
         }
 
         c64_control_block_ack_write(~c64_control_block_ack_read());
+
+        timer0_uptime_latch_write(1);
+        write_commit_cycles = timer0_uptime_cycles_read() + WRITE_COMMIT_INTERVAL_CYCLES;
     }
 
     if (pending & EV_BLOCK_RD) {
@@ -228,6 +228,9 @@ int c64_disk_commit(void) {
     UINT br, bw;
     int ret = -1;
 
+    timer0_uptime_latch_write(1);
+    write_commit_cycles = timer0_uptime_cycles_read() + WRITE_COMMIT_INTERVAL_CYCLES;
+
     if (mounted_path == NULL) {
         printf("c64_disk_commit: no image mounted\n");
         d64_dirty = 0;
@@ -312,9 +315,6 @@ int c64_disk_commit(void) {
 
 exit:
     irq_setmask(irq_getmask() | (1 << C64_CONTROL_INTERRUPT));
-
-    timer0_uptime_latch_write(1);
-    write_commit_cycles = timer0_uptime_cycles_read() + WRITE_COMMIT_INTERVAL_CYCLES;
 
     f_unmount("");
     return ret;

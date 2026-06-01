@@ -43,14 +43,6 @@
 
 #include "main.h"
 
-/* irq_attach is stripped by LTO since our isr_handler bypasses irq_table;
- * provide a stub that preserves the irq_setie semantics uart_init relies on. */
-int irq_attach(unsigned int irq, isr_t isr) {
-    (void)irq;
-    (void)isr;
-    return (int)irq;
-}
-
 static struct embedded_cli cli;
 
 static FATFS fs;
@@ -725,20 +717,21 @@ int main(void) {
     irq_setie(1);
 
     uart_init();
-    heap_init();
 
+    irq_setmask(irq_getmask() | (1 << UART_INTERRUPT));
+
+    heap_init();
     input_init();
 
     c64_init();
     c64_disk_init();
     c64_tape_init();
 
+    irq_setmask(irq_getmask() | (1 << C64_CONTROL_INTERRUPT));
+
     help_cmd();
     busy_wait(2000);
     c64_disable_overlay();
-
-    irq_attach(C64_CONTROL_INTERRUPT, c64_control_isr);
-    irq_setmask(irq_getmask() | (1 << C64_CONTROL_INTERRUPT));
 
     input_register_alt_callback(alt_callback);
 

@@ -194,7 +194,7 @@ always @(*) begin
   track_next = track;
   move       = stp - stp_prev;
 
-  if (mtr && move[0]) begin
+  if (move[0]) begin
     if (~move[1] && track < 84)
       track_next = track + 1;
     if ( move[1] && track > 0 )
@@ -232,7 +232,7 @@ always @(posedge clk) begin
     if (track_modified || buff_we) begin
       track_modified <= 1;
 
-      if ((track != track_next) || !mtr || (&read_timer)) begin
+      if ((track != track_next) || (&read_timer)) begin
         save_track     <= !save_track;
         track_modified <= 0;
       end

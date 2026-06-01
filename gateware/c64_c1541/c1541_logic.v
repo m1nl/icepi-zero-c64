@@ -53,7 +53,7 @@ module c1541_logic #(
 );
 
 wire [15:0] cpu_a;
-wire [ 7:0] cpu_di;
+reg  [ 7:0] cpu_di;
 wire [ 7:0] cpu_do;
 wire        cpu_rwn;
 wire        cpu_irq_n;
@@ -88,18 +88,6 @@ always @(*) begin
   cpu_di = 8'hff;
 
   casez (cpu_a[15:10])
-    6'b0zz00z: begin
-      cpu_di = ram_do;
-      ram_cs = 1;
-    end
-    6'b0zz110: begin
-      cpu_di = uc1_do;
-      uc1_cs = 1;
-    end
-    6'b0zz111: begin
-      cpu_di = uc3_do;
-      uc3_cs = 1;
-    end
     6'b100zzz: begin
       if (ext_en) begin
         cpu_di    = extram_do;
@@ -113,6 +101,18 @@ always @(*) begin
     6'b1zzzzz: begin
       cpu_di = rom_do;
       rom_cs = 1;
+    end
+    6'b0zz00z: begin
+      cpu_di = ram_do;
+      ram_cs = 1;
+    end
+    6'b0zz110: begin
+      cpu_di = uc1_do;
+      uc1_cs = 1;
+    end
+    6'b0zz111: begin
+      cpu_di = uc3_do;
+      uc3_cs = 1;
     end
     default: ;
   endcase
