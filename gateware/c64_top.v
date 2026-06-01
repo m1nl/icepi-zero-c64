@@ -535,6 +535,7 @@ c64_c1541 #(
 ) c64_c1541_0 (
   .clk          (clk),
   .reset        (cpu_reset),
+  .stall        (vic_stall),
   .img_mounted  (img_mounted),
   .img_readonly (img_readonly),
   .img_size     (img_size),
@@ -919,7 +920,6 @@ c64_bus_arbiter c64_bus_arbiter_0 (
   .cpu_pout  (cpu_pout),
   .cpu_pin   (cpu_pin),
   .cpu_we    (cpu_we),
-  .cpu_rdy   (cpu_rdy),
   .cpu_pc    (cpu_pc),
   .cpu_irq   (cpu_irq),
   .cpu_nmi   (cpu_nmi),

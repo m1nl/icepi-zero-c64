@@ -26,6 +26,7 @@ module c64_c1541 #(
 ) (
   input  wire        clk,
   input  wire        reset,
+  input  wire        stall,
 
   input  wire        img_mounted,
   input  wire        img_readonly,
@@ -79,7 +80,7 @@ wire gcr_ce;
 reg [GCR_CNT_WIDTH-1:0] gcr_ce_cnt  = 0;
 reg [3:0]               clock_phase = 0;
 
-assign gcr_ce = (gcr_ce_cnt >= FREQUENCY_NORMALIZED[GCR_CNT_WIDTH-1:0]);
+assign gcr_ce = (gcr_ce_cnt >= FREQUENCY_NORMALIZED[GCR_CNT_WIDTH-1:0]) && !stall;
 
 assign clk_r  = (clock_phase == 4'd0) && gcr_ce;
 assign clk_f  = (clock_phase == 4'd8) && gcr_ce;
@@ -89,7 +90,7 @@ always @(posedge clk) begin
     gcr_ce_cnt  <= 0;
     clock_phase <= 0;
 
-  end else begin
+  end else if (!stall) begin
     gcr_ce_cnt <= gcr_ce_cnt + GCR_INCREMENT[GCR_CNT_WIDTH-1:0];
 
     if (gcr_ce) begin

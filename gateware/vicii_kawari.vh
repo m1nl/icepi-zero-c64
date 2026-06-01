@@ -39,31 +39,36 @@
 
 // PAL CAS/RAS rise/fall times based on PAL dot4x clock
 `define PAL_RAS_RISE_P 15
-`define PAL_RAS_RISE_N 0
 `define PAL_CAS_RISE_P 15
-`define PAL_CAS_RISE_N 0
 `define PAL_RAS_FALL_P 3
-`define PAL_RAS_FALL_N 3
 `define PAL_MUX_COL 4
 `define PAL_CAS_FALL_P 5
-`define PAL_CAS_FALL_N 5
+
+// ignored
+`define PAL_RAS_RISE_N 0
+`define PAL_CAS_RISE_N 0
+`define PAL_RAS_FALL_N 0
+`define PAL_CAS_FALL_N 0
 
 // NTSC CAS/RAS rise/fall times based on NTSC dot4x clock
 `define NTSC_RAS_RISE_P 15
-`define NTSC_RAS_RISE_N 0
 `define NTSC_CAS_RISE_P 15
+`define NTSC_RAS_FALL_P 3
+`define NTSC_MUX_COL 4
+`define NTSC_CAS_FALL_P 5
+
+// ignored
+`define NTSC_RAS_RISE_N 0
 `define NTSC_CAS_RISE_N 0
-`define NTSC_RAS_FALL_P 4
-`define NTSC_RAS_FALL_N 5
-`define NTSC_MUX_COL 6
-`define NTSC_CAS_FALL_P 7
-`define NTSC_CAS_FALL_N 6
+`define NTSC_RAS_FALL_N 0
+`define NTSC_CAS_FALL_N 0
 
 // Other:
 // NOTE: CAS_GLITCH [9] has worked the best for emulamer demos. Works well on
 // both DRAM and static RAM. [10] starts to miss pixels on static RAM.  With
 // [11] the characters will completely disappear.
 `define CAS_GLITCH 9
+
 // This can be this early because we calculate vic_addr in the same process
 // block as where ado is set.  It can't be earlier because cycle type needs
 // to be valid and it doesn't become valid until at least [2].

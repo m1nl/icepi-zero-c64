@@ -45,7 +45,6 @@ module c64_bus_arbiter (
   input  wire [5:0]  cpu_pout,
   output reg  [5:0]  cpu_pin,
   input  wire        cpu_we,
-  input  wire        cpu_rdy,
   input  wire [15:0] cpu_pc,
   input wire         cpu_irq,
   input wire         cpu_nmi,
@@ -460,8 +459,6 @@ always @(*) begin
   cpu_pin      = {1'b1, cass_sense_n, 4'b1111};
 
   if (cpu_reset || vic_reset) begin
-    /* no-op */
-  end else if (!vic_write_ab && !cpu_we && !reu_dma_active && !vic_ba) begin
     /* no-op */
   end else if (!vic_write_ab) begin
     vic_we  = bus_we;
