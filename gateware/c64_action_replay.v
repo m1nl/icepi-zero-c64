@@ -59,7 +59,6 @@ module c64_action_replay (
   output wire        ram_we,
   input  wire        ram_ready,
   input  wire [7:0]  ram_dout,
-  output wire [7:0]  ram_din,
   output wire        ram_select
 );
 
