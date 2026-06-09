@@ -20,7 +20,8 @@
 `timescale 1 ns / 1 ps
 
 module c1541_gcr #(
-  parameter LFSR_SIMPLE = 1
+  parameter LFSR_SIMPLE = 1,
+  parameter GEOMETRY_SIMPLE = 1
 ) (
   input  wire        clk,
   input  wire        reset,
@@ -65,11 +66,18 @@ wire [12:0] gcr_header_data_size  = 80;
 wire [12:0] gcr_header_total_size = 152;
 
 wire [12:0] gcr_sector_data_size  = 2600;
-wire [12:0] gcr_sector_total_size = (sector != sector_max) ? gcr_sector_data_size +   64 :
-                                          (track_num < 18) ? gcr_sector_data_size +  784 :
-                                          (track_num < 25) ? gcr_sector_data_size + 2176 :
-                                          (track_num < 31) ? gcr_sector_data_size + 1264 :
-                                                             gcr_sector_data_size +  832 ;
+wire [12:0] gcr_sector_total_size;
+
+generate
+  if (GEOMETRY_SIMPLE)
+    assign gcr_sector_total_size = gcr_sector_data_size + 64;
+  else
+    assign gcr_sector_total_size = (sector != sector_max) ? gcr_sector_data_size +   64 :
+                                         (track_num < 18) ? gcr_sector_data_size +  784 :
+                                         (track_num < 25) ? gcr_sector_data_size + 2176 :
+                                         (track_num < 31) ? gcr_sector_data_size + 1264 :
+                                                            gcr_sector_data_size +  832 ;
+endgenerate
 
 // --- DolphinDOS repeats last GCR byte twice when writing a sector and
 // --- expects SAME GCR byte to be provided during verification
