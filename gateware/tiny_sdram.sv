@@ -18,10 +18,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Modified by m1nl to support variable read / write burst and two ports;
-// P0 has priority over P1 and P1 has priority over P2; there is no pipelining
-// for reads, and each word is read sequentially - this is a potential room
-// for improvement
+// Modified by m1nl to support variable read / write burst lengths and three ports
+// P0 has priority over P1 and P1 has priority over P2
 
 `define CEIL(x) $rtoi($ceil(x))
 `define MAX(x,y) (x > y) ? (x) : (y)
@@ -129,11 +127,6 @@ module tiny_sdram #(
   // 8,192 refresh commands every 64ms = 7.8125us, which we round to 7500ns to make sure we hit them all
   localparam real SETTING_REFRESH_TIMER_NANO_SEC = 7500;
 
-  // Reads will be delayed by 1 cycle when enabled
-  // Highly recommended that you use with SDRAM with FAST_INPUT_REGISTER enabled for timing and stability
-  // This makes read timing incompatible with the test model
-  localparam SETTING_USE_FAST_INPUT_REGISTER = 1;
-
   ////////////////////////////////////////////////////////////////////////////////////////
   // Generated parameters
 
@@ -222,27 +215,41 @@ module tiny_sdram #(
     INIT,
     STANDBY,
     IDLE,
-    DELAY,
+    RAS_DELAY_WRITE,
     WRITE,
-    READ,
-    READ_OUTPUT
+    RAS_DELAY_READ,
+    READ
   } state_fsm;
 
   (* fsm_encoding = "auto" *)
   state_fsm state;
 
-  (* fsm_encoding = "none" *)
-  state_fsm delay_state;
+  // Generic delay counter
+  localparam DELAY_COUNTER_MAX   = CYCLES_UNTIL_REFRESH2_END + SETTING_T_MRD_MIN_LOAD_MODE_CLOCK_CYCLES;
+  localparam DELAY_COUNTER_WIDTH = $clog2(DELAY_COUNTER_MAX + 1);
 
-  // TODO: Could use fewer bits
-  reg [31:0] delay_counter = 0;
-  // Number of cycles since row was locked
-  reg [7:0] ras_counter = 8'hff;
+  reg [DELAY_COUNTER_WIDTH - 1:0] delay_counter = 0;
+
+  // Number of cycles since a row was locked
+  localparam RAS_COUNTER_WIDTH = $clog2(CYCLES_PER_ROW_OPEN_WITH_PRECHARGE + 1);
+
+  reg [RAS_COUNTER_WIDTH - 1:0] ras_counter = {(RAS_COUNTER_WIDTH){1'b1}};
+
+  // Number of delay cycles left for data available
+  localparam CAS_DELAY_WIDTH = $clog2(CAS_LATENCY + 2);
+
+  reg [CAS_DELAY_WIDTH - 1:0] cas_delay = CAS_LATENCY[CAS_DELAY_WIDTH-1:0] + 1;
+
   // The number of words we're reading
-  reg [3:0] burst_counter = 0;
+  localparam BURST_COUNTER_WIDTH = $clog2(MAX_BURST_LENGTH + 1);
+
+  reg [BURST_COUNTER_WIDTH - 1:0] burst_counter_req  = 0;
+  reg [BURST_COUNTER_WIDTH - 1:0] burst_counter_read = 0;
 
   // Measures when auto refresh needs to be triggered
-  reg [15:0] refresh_counter = 0;
+  localparam REFRESH_COUNTER_WIDTH = $clog2(CYCLES_PER_REFRESH + 1);
+
+  reg [REFRESH_COUNTER_WIDTH - 1:0] refresh_counter = 0;
 
   reg [1:0] active_port = 0;
 
@@ -310,7 +317,7 @@ module tiny_sdram #(
   // Helpers
 
   // Activates a row
-  task set_active_command(logic [1:0] port, logic [23:0] addr, state_fsm next_state);
+  task set_active_command(logic [1:0] port, logic [23:0] addr, logic write);
     sdram_command <= COMMAND_ACTIVE;
 
     // Set active port
@@ -322,21 +329,17 @@ module tiny_sdram #(
     // Row address
     SDRAM_A <= addr[21:9];
 
-    if (CYCLES_FOR_ACTIVE_ROW <= 1) begin
-        state <= next_state;
-    end else begin
-        state       <= DELAY;
-        delay_state <= next_state;
-
-        // Current construction takes two cycles to write next data
-        delay_counter <= CYCLES_FOR_ACTIVE_ROW - 32'h2;
-    end
-
-    // Initiate burst counter
-    burst_counter <= 0;
-
-    // Initiate RAS counter
+    // Reset RAS counter
     ras_counter <= 0;
+
+    if (CYCLES_FOR_ACTIVE_ROW > 1) begin
+      // Wait enough time for the row to open before issuing read or write operation
+      delay_counter <= CYCLES_FOR_ACTIVE_ROW > 2 ? CYCLES_FOR_ACTIVE_ROW[DELAY_COUNTER_WIDTH-1:0] - 2 : 0;
+      state         <= write ? RAS_DELAY_WRITE : RAS_DELAY_READ;
+
+    end else
+      // Setup next state
+      state <= write ? WRITE : READ;
   endtask
 
   reg dq_output = 0;
@@ -363,15 +366,19 @@ module tiny_sdram #(
                                                   {{(16 - P2_BURST_LENGTH * 2){1'b0}}, p2_wdata_we_queue};
 
 
-  wire [3:0] expected_count = active_port == 0 ? P0_BURST_LENGTH :
-                              active_port == 1 ? P1_BURST_LENGTH :
-                                                 P2_BURST_LENGTH;
+  wire [BURST_COUNTER_WIDTH-1:0] expected_burst_num = active_port == 0 ? P0_BURST_LENGTH - 1:
+                                                      active_port == 1 ? P1_BURST_LENGTH - 1:
+                                                                         P2_BURST_LENGTH - 1;
 
   ////////////////////////////////////////////////////////////////////////////////////////
   // Process
 
-  wire cmd_pending = (refresh_counter >= CYCLES_PER_REFRESH[15:0]) ||
-      p0_cmd_wr || p0_cmd_rd || p1_cmd_wr || p1_cmd_rd || p2_cmd_wr || p2_cmd_rd;
+  wire cmd_pending = (refresh_counter >= CYCLES_PER_REFRESH[REFRESH_COUNTER_WIDTH-1:0]) || p0_cmd_wr || p0_cmd_rd || p1_cmd_wr || p1_cmd_rd || p2_cmd_wr || p2_cmd_rd;
+
+  reg [15:0] sdram_dq_r;
+
+  always_ff @(negedge clk)
+    sdram_dq_r <= SDRAM_DQ;
 
   always_ff @(posedge clk) begin
     if (reset) begin
@@ -383,10 +390,10 @@ module tiny_sdram #(
       state <= INIT;
 
       delay_counter <= 0;
-      delay_state   <= IDLE;
 
       refresh_counter <= 0;
-      ras_counter     <= 8'hff;
+      ras_counter     <= {(RAS_COUNTER_WIDTH){1'b1}};
+      cas_delay       <= CAS_LATENCY[CAS_DELAY_WIDTH-1:0] + 1;
 
       p0_cmd_pending <= 0;
       p1_cmd_pending <= 0;
@@ -442,47 +449,51 @@ module tiny_sdram #(
       p2_wdata_ready <= 0;
 
       // Default to NOP at all times in between commands
-      // NOP
       sdram_command <= COMMAND_NOP;
 
-      if (state != INIT) begin
-        refresh_counter <= refresh_counter + 16'h1;
+      refresh_counter <= refresh_counter + 1;
 
-        if (!(&ras_counter))
-          ras_counter <= ras_counter + 8'h1;
-      end
+      // Ensure RAS counter does not overflow
+      if (!(&ras_counter))
+        ras_counter <= ras_counter + 1;
 
       case (state)
         INIT: begin
-          delay_counter <= delay_counter + 32'h1;
+          delay_counter <= delay_counter + 1;
 
-          if (delay_counter == CYCLES_UNTIL_START_INHIBIT) begin
+          // Keep refresh counter in reset
+          refresh_counter <= 0;
+
+          if (delay_counter == CYCLES_UNTIL_START_INHIBIT[DELAY_COUNTER_WIDTH-1:0]) begin
             // Start setting inhibit
             // 5. Starting at some point during this 100us period, bring CKE high
             SDRAM_CKE <= 1;
 
             // We're already asserting NOP above
-          end else if (delay_counter == CYCLES_UNTIL_CLEAR_INHIBIT) begin
+          end else if (delay_counter == CYCLES_UNTIL_CLEAR_INHIBIT[DELAY_COUNTER_WIDTH-1:0]) begin
             // Clear inhibit, start precharge
             sdram_command <= COMMAND_PRECHARGE;
 
             // Mark all banks for refresh
             SDRAM_A[10] <= 1;
-          end else if (delay_counter == CYCLES_UNTIL_INIT_PRECHARGE_END || delay_counter == CYCLES_UNTIL_REFRESH1_END) begin
+          end else if (delay_counter == CYCLES_UNTIL_INIT_PRECHARGE_END[DELAY_COUNTER_WIDTH-1:0] || delay_counter == CYCLES_UNTIL_REFRESH1_END[DELAY_COUNTER_WIDTH-1:0]) begin
             // Precharge done (or first auto refresh), auto refresh
             // CKE high specifies auto refresh
             SDRAM_CKE <= 1;
 
             sdram_command <= COMMAND_AUTO_REFRESH;
-          end else if (delay_counter == CYCLES_UNTIL_REFRESH2_END) begin
+          end else if (delay_counter == CYCLES_UNTIL_REFRESH2_END[DELAY_COUNTER_WIDTH-1:0]) begin
             // Second auto refresh done, load mode register
             sdram_command <= COMMAND_LOAD_MODE_REG;
 
             SDRAM_BA <= 2'b0;
             SDRAM_A  <= configured_mode;
-          end else if (delay_counter == CYCLES_UNTIL_REFRESH2_END + SETTING_T_MRD_MIN_LOAD_MODE_CLOCK_CYCLES) begin
+          end else if (delay_counter == CYCLES_UNTIL_REFRESH2_END[DELAY_COUNTER_WIDTH-1:0] + SETTING_T_MRD_MIN_LOAD_MODE_CLOCK_CYCLES[DELAY_COUNTER_WIDTH-1:0]) begin
             // We can now execute commands
             state <= IDLE;
+
+            // Reset delay counter
+            delay_counter <= 0;
 
             // We're already asserting NOP above
           end
@@ -505,61 +516,68 @@ module tiny_sdram #(
           // Stop outputting on DQ and hold in high Z
           dq_output <= 0;
 
-          if (ras_counter < CYCLES_PER_ROW_OPEN_WITH_PRECHARGE[7:0]) begin
-            // Since we auto-precharge, ensure we wait for at least tRAS + tRP before activating next row
+          // Reset burst counter
+          burst_counter_req  <= 0;
+          burst_counter_read <= 0;
+
+          // Reset CAS delay
+          cas_delay <= CAS_LATENCY[CAS_DELAY_WIDTH-1:0] + 1;
+
+          if (delay_counter != 0) begin
+            // Stay in IDLE state for any outstanding delay
+            state         <= IDLE;
+            delay_counter <= delay_counter - 1;
+
+          end else if (ras_counter < CYCLES_PER_ROW_OPEN_WITH_PRECHARGE[RAS_COUNTER_WIDTH-1:0]) begin
+            // Since we always auto-precharge, ensure we wait for at least tRAS + tRP before activating next row
             state <= IDLE;
 
-          end else if (refresh_counter >= CYCLES_PER_REFRESH[15:0]) begin
-            // Trigger refresh
-            state         <= DELAY;
-            delay_state   <= IDLE;
-            delay_counter <= CYCLES_FOR_AUTOREFRESH > 32'h2 ? CYCLES_FOR_AUTOREFRESH - 32'h2 : 32'h0;
+          end else if (refresh_counter >= CYCLES_PER_REFRESH[REFRESH_COUNTER_WIDTH-1:0]) begin
+            // Trigger refresh whenever needed
+            state         <= IDLE;
+            delay_counter <= CYCLES_FOR_AUTOREFRESH > 1 ? CYCLES_FOR_AUTOREFRESH[DELAY_COUNTER_WIDTH-1:0] - 1 : 0;
 
             refresh_counter <= 0;
 
             sdram_command <= COMMAND_AUTO_REFRESH;
+
           end else if (p0_cmd_wr) begin
             // Port 0 write
-            set_active_command(0, p0_cmd_addr_current, WRITE);
+            set_active_command(0, p0_cmd_addr_current, 1);
           end else if (p0_cmd_rd) begin
             // Port 0 read
-            set_active_command(0, p0_cmd_addr_current, READ);
+            set_active_command(0, p0_cmd_addr_current, 0);
           end else if (p1_cmd_wr) begin
             // Port 1 write
-            set_active_command(1, p1_cmd_addr_current, WRITE);
+            set_active_command(1, p1_cmd_addr_current, 1);
           end else if (p1_cmd_rd) begin
             // Port 1 read
-            set_active_command(1, p1_cmd_addr_current, READ);
+            set_active_command(1, p1_cmd_addr_current, 0);
           end else if (p2_cmd_wr) begin
-            // Port 1 write
-            set_active_command(2, p2_cmd_addr_current, WRITE);
+            // Port 2 write
+            set_active_command(2, p2_cmd_addr_current, 1);
           end else if (p2_cmd_rd) begin
-            // Port 1 read
-            set_active_command(2, p2_cmd_addr_current, READ);
+            // Port 2 read
+            set_active_command(2, p2_cmd_addr_current, 0);
           end else if (ALLOW_STANDBY) begin
             state     <= STANDBY;
             SDRAM_CKE <= 0;
           end
         end
-        DELAY: begin
-          if (delay_counter != 0) begin
-            delay_counter <= delay_counter - 32'h1;
+        RAS_DELAY_WRITE: begin
+          state <= WRITE;
 
-          end else begin
-            case (delay_state)
-              STANDBY: state <= STANDBY;
-              WRITE: state <= WRITE;
-              READ: state <= READ;
-              READ_OUTPUT: state <= READ_OUTPUT;
-              default: state <= IDLE;
-            endcase
+          // Stay in RAS_DELAY_WRITE state for outstanding RAS delay
+          if (delay_counter != 0) begin
+            state         <= RAS_DELAY_WRITE;
+            delay_counter <= delay_counter - 1;
           end
         end
         WRITE: begin
           logic [127:0] temp;
           logic         last;
 
-          last = burst_counter == (expected_count - 1);
+          last = burst_counter_req == expected_burst_num;
 
           case (active_port)
             0: begin
@@ -577,7 +595,7 @@ module tiny_sdram #(
           dq_output <= 1;
 
           // Pick range from write data registers
-          case (burst_counter)
+          case ({{(3-BURST_COUNTER_WIDTH){1'b0}}, burst_counter_req})
             0: begin sdram_data <= temp[15:0];    SDRAM_DQM <= ~wdata_we_queue[1:0];   end
             1: begin sdram_data <= temp[31:16];   SDRAM_DQM <= ~wdata_we_queue[3:2];   end
             2: begin sdram_data <= temp[47:32];   SDRAM_DQM <= ~wdata_we_queue[5:4];   end
@@ -586,26 +604,25 @@ module tiny_sdram #(
             5: begin sdram_data <= temp[95:80];   SDRAM_DQM <= ~wdata_we_queue[11:10]; end
             6: begin sdram_data <= temp[111:96];  SDRAM_DQM <= ~wdata_we_queue[13:12]; end
             7: begin sdram_data <= temp[127:112]; SDRAM_DQM <= ~wdata_we_queue[15:14]; end
+            default: ;
           endcase
 
           // NOTE: Bank is still set from ACTIVE command assertion
           // High bit enables auto precharge. I assume the top 2 bits are unused
           // Precharge when last word is written
-          SDRAM_A <= {2'b0, last, 1'b0, cmd_addr_queue[8:0] + {4'b0, burst_counter}};
+          SDRAM_A <= {2'b0, last, 1'b0, cmd_addr_queue[8:0] + {5'b0, {(3-BURST_COUNTER_WIDTH){1'b0}}, burst_counter_req}};
 
           sdram_command <= COMMAND_WRITE;
 
-          // We assume burst has not finished yet
-          state         <= WRITE;
-          burst_counter <= burst_counter + 4'd1;
+          // We assume write burst has not finished yet
+          state             <= WRITE;
+          burst_counter_req <= burst_counter_req + 1;
+
+          // A write must wait for auto precharge (tWR) and precharge command period (tRP)
+          delay_counter <= CYCLES_AFTER_WRITE_FOR_NEXT_COMMAND > 1 ? CYCLES_AFTER_WRITE_FOR_NEXT_COMMAND[DELAY_COUNTER_WIDTH-1:0] - 1 : 0;
 
           if (last) begin
-            state       <= DELAY;
-            delay_state <= IDLE;
-
-            // A write must wait for auto precharge (tWR) and precharge command period (tRP)
-            // Takes one cycle to get back to IDLE, and another to read command
-            delay_counter <= CYCLES_AFTER_WRITE_FOR_NEXT_COMMAND > 32'h2 ? CYCLES_AFTER_WRITE_FOR_NEXT_COMMAND - 32'h2 : 32'h0;
+            state <= IDLE;
 
             case (active_port)
               0: begin
@@ -629,96 +646,98 @@ module tiny_sdram #(
             endcase
           end
         end
-        READ: begin
-          logic last;
+        RAS_DELAY_READ: begin
+          state <= READ;
 
-          last = burst_counter == (expected_count - 1);
-
-          if (CAS_LATENCY == 1 && ~SETTING_USE_FAST_INPUT_REGISTER) begin
-            // Go directly to read
-            state <= READ_OUTPUT;
-          end else begin
-            state       <= DELAY;
-            delay_state <= READ_OUTPUT;
-
-            // Takes one cycle to go to read data, and one to actually read the data
-            // Fast input register delays operation by a cycle
-            delay_counter <= (CAS_LATENCY + SETTING_USE_FAST_INPUT_REGISTER) > 32'h2 ? (CAS_LATENCY + SETTING_USE_FAST_INPUT_REGISTER) - 32'h2 : 32'h0;
-          end
-
-          // NOTE: Bank is still set from ACTIVE command assertion
-          // High bit enables auto precharge. I assume the top 2 bits are unused
-          // Precharge when last word is read
-          SDRAM_A <= {2'b0, last, 1'b0, cmd_addr_queue[8:0] + {4'b0, burst_counter}};
-
-          // Fetch all bytes
-          SDRAM_DQM <= 2'b0;
-
-          sdram_command <= COMMAND_READ;
-
-          if (last) begin
-            case (active_port)
-              0: begin
-                // Clear pending command
-                p0_cmd_pending <= 1'b0;
-              end
-              1: begin
-                // Clear pending command
-                p1_cmd_pending <= 1'b0;
-              end
-              2: begin
-                // Clear pending command
-                p2_cmd_pending <= 1'b0;
-              end
-            endcase
+          // Stay in RAS_DELAY_READ state for outstanding delay
+          if (delay_counter != 0) begin
+            state         <= RAS_DELAY_READ;
+            delay_counter <= delay_counter - 1;
           end
         end
-        READ_OUTPUT: begin
-          logic [127:0] temp;
+        READ: begin
           logic         last;
+          logic [127:0] temp;
 
-          last = burst_counter == (expected_count - 1);
+          if (burst_counter_req <= expected_burst_num) begin
+            last = burst_counter_req == expected_burst_num;
 
-          case (active_port)
-            0: begin
-              temp[P0_OUTPUT_WIDTH - 1:0] = p0_rdata;
-            end
-            1: begin
-              temp[P1_OUTPUT_WIDTH - 1:0] = p1_rdata;
-            end
-            2: begin
-              temp[P2_OUTPUT_WIDTH - 1:0] = p2_rdata;
-            end
-          endcase
+            burst_counter_req <= burst_counter_req + 1;
 
-         case (burst_counter)
-            0: temp[15:0]    = SDRAM_DQ;
-            1: temp[31:16]   = SDRAM_DQ;
-            2: temp[47:32]   = SDRAM_DQ;
-            3: temp[63:48]   = SDRAM_DQ;
-            4: temp[79:64]   = SDRAM_DQ;
-            5: temp[95:80]   = SDRAM_DQ;
-            6: temp[111:96]  = SDRAM_DQ;
-            7: temp[127:112] = SDRAM_DQ;
-          endcase
+            // NOTE: Bank is still set from ACTIVE command assertion
+            // High bit enables auto precharge. I assume the top 2 bits are unused
+            // Precharge when last word is read
+            SDRAM_A <= {2'b0, last, 1'b0, cmd_addr_queue[8:0] + {5'b0, {(3-BURST_COUNTER_WIDTH){1'b0}}, burst_counter_req}};
 
-          state         <= last ? IDLE : READ;
-          burst_counter <= burst_counter + 4'd1;
+            // Fetch all bytes
+            SDRAM_DQM <= 2'b0;
 
-          case (active_port)
-            0: begin
-              p0_rdata       <= temp[P0_OUTPUT_WIDTH - 1:0];
-              p0_rdata_valid <= last;
+            sdram_command <= COMMAND_READ;
+
+            if (last) begin
+              case (active_port)
+                0: begin
+                  // Clear pending command
+                  p0_cmd_pending <= 1'b0;
+                end
+                1: begin
+                  // Clear pending command
+                  p1_cmd_pending <= 1'b0;
+                end
+                2: begin
+                  // Clear pending command
+                  p2_cmd_pending <= 1'b0;
+                end
+              endcase
             end
-            1: begin
-              p1_rdata       <= temp[P1_OUTPUT_WIDTH - 1:0];
-              p1_rdata_valid <= last;
-            end
-            2: begin
-              p2_rdata       <= temp[P2_OUTPUT_WIDTH - 1:0];
-              p2_rdata_valid <= last;
-            end
-          endcase
+          end
+
+          if (cas_delay == 0) begin
+            last = burst_counter_read == expected_burst_num;
+
+            burst_counter_read <= burst_counter_read + 1;
+
+            case (active_port)
+              0: begin
+                temp[P0_OUTPUT_WIDTH - 1:0] = p0_rdata;
+              end
+              1: begin
+                temp[P1_OUTPUT_WIDTH - 1:0] = p1_rdata;
+              end
+              2: begin
+                temp[P2_OUTPUT_WIDTH - 1:0] = p2_rdata;
+              end
+            endcase
+
+           case ({{(3-BURST_COUNTER_WIDTH){1'b0}}, burst_counter_read})
+              0: temp[15:0]    = sdram_dq_r;
+              1: temp[31:16]   = sdram_dq_r;
+              2: temp[47:32]   = sdram_dq_r;
+              3: temp[63:48]   = sdram_dq_r;
+              4: temp[79:64]   = sdram_dq_r;
+              5: temp[95:80]   = sdram_dq_r;
+              6: temp[111:96]  = sdram_dq_r;
+              7: temp[127:112] = sdram_dq_r;
+            endcase
+
+            if (last) state <= IDLE;
+
+            case (active_port)
+              0: begin
+                p0_rdata       <= temp[P0_OUTPUT_WIDTH - 1:0];
+                p0_rdata_valid <= last;
+              end
+              1: begin
+                p1_rdata       <= temp[P1_OUTPUT_WIDTH - 1:0];
+                p1_rdata_valid <= last;
+              end
+              2: begin
+                p2_rdata       <= temp[P2_OUTPUT_WIDTH - 1:0];
+                p2_rdata_valid <= last;
+              end
+            endcase
+          end else
+            cas_delay <= cas_delay - 1;
         end
         default: begin
           state <= INIT;
@@ -739,6 +758,8 @@ module tiny_sdram #(
     $display("sdram: CYCLES_AFTER_WRITE_FOR_NEXT_COMMAND=%0d", CYCLES_AFTER_WRITE_FOR_NEXT_COMMAND);
     $display("sdram: CYCLES_PER_REFRESH=%0d", CYCLES_PER_REFRESH);
     $display("sdram: CYCLES_PER_ROW_OPEN_WITH_PRECHARGE=%0d", CYCLES_PER_ROW_OPEN_WITH_PRECHARGE);
+    $display("sdram: BURST_COUNTER_WIDTH=%0d", BURST_COUNTER_WIDTH);
+    $display("sdram: CAS_DELAY_WIDTH=%0d", CAS_DELAY_WIDTH);
   end
 
 endmodule

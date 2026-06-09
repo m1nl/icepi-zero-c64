@@ -60,7 +60,7 @@ class _CRG(LiteXModule):
 
         if sdram_rate == "1:3":
             pll.create_clkout(self.cd_sys3x, 3 * sys_clk_freq)
-            pll.create_clkout(self.cd_sys3x_ps, 3 * sys_clk_freq, phase=120)
+            pll.create_clkout(self.cd_sys3x_ps, 3 * sys_clk_freq, phase=135)
         else:
             pll.create_clkout(
                 self.cd_sys_ps, sys_clk_freq, phase=45
