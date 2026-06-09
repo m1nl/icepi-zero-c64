@@ -204,7 +204,7 @@ vicii_kawari #(
   .cen                 (vic_cen),
   .we                  (vic_we),
   .irq                 (vic_irq),
-  .lp                  (1'b0),
+  .lp                  (1'b1),
   .aec                 (vic_aec),
   .ba                  (vic_ba),
   .ras                 (vic_ras),
@@ -789,7 +789,6 @@ wire        ram_ar_enable;
 reg         ram_ar_we;
 reg         ram_ar_ready;
 reg  [7:0]  ram_ar_dout;
-wire [7:0]  ram_ar_din;
 wire        ram_ar_select;
 
 wire        ar_nmi;
@@ -830,7 +829,6 @@ c64_action_replay c64_action_replay_0 (
   .ram_we        (ram_ar_we),
   .ram_ready     (ram_ar_ready),
   .ram_dout      (ram_ar_dout),
-  .ram_din       (ram_ar_din),
   .ram_select    (ram_ar_select)
 );
 
