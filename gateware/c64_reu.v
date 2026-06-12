@@ -135,6 +135,16 @@ wire [1:0] xfer_type = r_cmd[1:0];
 
 assign reu_dma_active = (state != ST_IDLE);
 
+reg vic_ba2;
+reg vic_ba3;
+
+always @(posedge clk) begin
+  if (phi2_n) begin
+    vic_ba2 <= vic_ba;
+    vic_ba3 <= vic_ba2 || vic_ba;
+  end
+end
+
 initial begin
   r_int             = 2'b00;
   r_cmd             = 8'h10;
@@ -336,7 +346,7 @@ always @(posedge clk) begin
       //
       // Types using this state: 01 (REU->C64), 10 (SWAP)
       ST_WRITE_C64: begin
-        if (vic_ba && phi2_p && !c64_bus_valid) begin
+        if (vic_ba3 && phi2_p && !c64_bus_valid) begin
           reu_dma_addr <= r_c64_addr;
           reu_dma_we   <= 1'b1;
           c64_bus_valid <= 1'b1;
@@ -388,7 +398,7 @@ always @(posedge clk) begin
 
       // -- DONE: release DMA, set interrupt flags, optional autoload --------
       ST_DONE: begin
-        if (phi2_p) begin
+        if (phi2_p && vic_ba2) begin
           // set EOB unless a verify fault fired before the last byte
           if (!(r_int[0] && r_xfer_len != 16'd1)) begin
             r_int[1] <= 1'b1;
