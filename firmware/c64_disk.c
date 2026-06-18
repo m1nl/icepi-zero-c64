@@ -177,9 +177,9 @@ int c64_disk_mount(const char *path, int rw) {
     uint16_t img_id = ((uint16_t)d64_data[TRACK18_OFFSET + BAM_DISK_ID_OFFSET + 1] << 8) |
                       (uint16_t)d64_data[TRACK18_OFFSET + BAM_DISK_ID_OFFSET];
 
-    c64_control_img_size_write(d64_size);
     c64_control_img_id_write(img_id);
     c64_control_img_readonly_write(!rw);
+    c64_control_img_present_write(1);
     c64_control_img_mounted_write(~c64_control_img_mounted_read());
 
     printf("c64_disk_mount: mounted '%s' (%u bytes, id=0x%04lx)\n", path, d64_size, (unsigned long)img_id);
@@ -215,11 +215,12 @@ void c64_disk_umount(void) {
     flush_cpu_dcache();
     flush_l2_cache();
 
-    c64_control_img_size_write(0);
     c64_control_img_id_write(0);
     c64_control_img_readonly_write(0);
+    c64_control_img_present_write(0);
     c64_control_img_mounted_write(~c64_control_img_mounted_read());
 }
+
 
 int c64_disk_commit(void) {
     static FATFS fs;
@@ -398,9 +399,9 @@ int c64_disk_format(const char *path, const char *label) {
 
     uint16_t img_id = (((uint16_t)id2) << 8) | ((uint16_t)id1);
 
-    c64_control_img_size_write(d64_size);
     c64_control_img_id_write(img_id);
     c64_control_img_readonly_write(0);
+    c64_control_img_present_write(1);
     c64_control_img_mounted_write(~c64_control_img_mounted_read());
 
     printf("c64_disk_format: mounted '%s' (%u bytes, id=0x%04lx)\n", path, d64_size, (unsigned long)img_id);

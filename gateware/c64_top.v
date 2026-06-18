@@ -106,10 +106,10 @@ module c64_top #(
   input  wire        block_ack,
 
   // Floppy disk image
-  input  wire        img_mounted,
-  input  wire        img_readonly,
-  input  wire [31:0] img_size,
   input  wire [15:0] img_id,
+  input  wire        img_readonly,
+  input  wire        img_present,
+  input  wire        img_mounted,
 
   // Video overlay
   input  wire [23:0] overlay_pixel,
@@ -134,6 +134,9 @@ module c64_top #(
   output wire       ps2_fifo_rd_en,
   input  wire [7:0] ps2_fifo_rd_data,
   input  wire       ps2_fifo_rd_valid,
+
+  // Cartridge
+  input  wire [15:0] cart_flags,
 
   // Other
   output wire       kbd_overlay_pulse,
@@ -536,10 +539,10 @@ c64_c1541 #(
   .clk          (clk),
   .reset        (cpu_reset),
   .stall        (vic_stall),
-  .img_mounted  (img_mounted),
-  .img_readonly (img_readonly),
-  .img_size     (img_size),
   .img_id       (img_id),
+  .img_readonly (img_readonly),
+  .img_present  (img_present),
+  .img_mounted  (img_mounted),
   .led          (c1541_led),
   .busy         (c1541_busy),
   .mtr          (c1541_mtr),
@@ -775,34 +778,36 @@ always @(*) begin
 end
 
 // ---------------------------------------------------------------------------
-// c64_action_replay_0
+// c64_cartridge_0
 // ---------------------------------------------------------------------------
 
-wire [15:0] rom_ar_addr;
-wire        rom_ar_enable;
-reg         rom_ar_ready;
-reg  [7:0]  rom_ar_dout;
-wire        rom_ar_select;
+wire [20:0] rom_cart_addr;
+wire        rom_cart_enable;
+reg         rom_cart_ready;
+reg  [7:0]  rom_cart_dout;
+wire        rom_cart_select;
 
-wire [15:0] ram_ar_addr;
-wire        ram_ar_enable;
-reg         ram_ar_we;
-reg         ram_ar_ready;
-reg  [7:0]  ram_ar_dout;
-wire        ram_ar_select;
+wire [14:0] ram_cart_addr;
+wire        ram_cart_enable;
+reg         ram_cart_we;
+reg         ram_cart_ready;
+reg  [7:0]  ram_cart_dout;
+wire        ram_cart_select;
 
-wire        ar_nmi;
-wire        ar_irq;
-wire        ar_freeze;
-wire [7:0]  ar_flags;
+wire        cart_nmi;
+wire        cart_irq;
+wire        cart_freeze;
+wire        cart_io2_we_valid;
 
 wire        sdram_pending;
 
-c64_action_replay c64_action_replay_0 (
+c64_cartridge c64_cartridge_0 (
   .clk           (clk),
   .reset         (cpu_reset),
   .phi2_p        (vic_phi2_p && !vic_stall),
   .phi2_h        (vic_phi2_h),
+  .sdram_pending (sdram_pending),
+  .cart_flags    (cart_flags),
   .addr          (cart_addr),
   .din           (cart_din),
   .dout          (cart_dout),
@@ -810,26 +815,25 @@ c64_action_replay c64_action_replay_0 (
   .ba            (cart_ba),
   .exrom         (cart_exrom),
   .game          (cart_game),
-  .freeze        (ar_freeze),
+  .freeze        (cart_freeze),
   .roml          (cart_roml),
   .romh          (cart_romh),
   .io1_cen       (cart_io1_cen),
   .io2_cen       (cart_io2_cen),
-  .nmi           (ar_nmi),
-  .irq           (ar_irq),
-  .flags         (ar_flags),
-  .sdram_pending (sdram_pending),
-  .rom_addr      (rom_ar_addr),
-  .rom_enable    (rom_ar_enable),
-  .rom_ready     (rom_ar_ready),
-  .rom_dout      (rom_ar_dout),
-  .rom_select    (rom_ar_select),
-  .ram_addr      (ram_ar_addr),
-  .ram_enable    (ram_ar_enable),
-  .ram_we        (ram_ar_we),
-  .ram_ready     (ram_ar_ready),
-  .ram_dout      (ram_ar_dout),
-  .ram_select    (ram_ar_select)
+  .io2_we_valid  (cart_io2_we_valid),
+  .nmi           (cart_nmi),
+  .irq           (cart_irq),
+  .rom_addr      (rom_cart_addr),
+  .rom_enable    (rom_cart_enable),
+  .rom_ready     (rom_cart_ready),
+  .rom_dout      (rom_cart_dout),
+  .rom_select    (rom_cart_select),
+  .ram_addr      (ram_cart_addr),
+  .ram_enable    (ram_cart_enable),
+  .ram_we        (ram_cart_we),
+  .ram_ready     (ram_cart_ready),
+  .ram_dout      (ram_cart_dout),
+  .ram_select    (ram_cart_select)
 );
 
 // ---------------------------------------------------------------------------
@@ -992,19 +996,19 @@ c64_bus_arbiter c64_bus_arbiter_0 (
 
   .reu_present (reu_present),
 
-  .cart_present (cart_present),
-  .cart_game    (cart_game),
-  .cart_exrom   (cart_exrom),
-  .cart_io1_cen (cart_io1_cen),
-  .cart_io2_cen (cart_io2_cen),
-  .cart_roml    (cart_roml),
-  .cart_romh    (cart_romh),
-  .cart_dout    (cart_dout),
-  .cart_din     (cart_din),
-  .cart_ba      (cart_ba),
-  .cart_we      (cart_we),
-  .cart_addr    (cart_addr),
-  .cart_flags   (ar_flags),
+  .cart_present      (cart_present),
+  .cart_game         (cart_game),
+  .cart_exrom        (cart_exrom),
+  .cart_io1_cen      (cart_io1_cen),
+  .cart_io2_cen      (cart_io2_cen),
+  .cart_io2_we_valid (cart_io2_we_valid),
+  .cart_roml         (cart_roml),
+  .cart_romh         (cart_romh),
+  .cart_dout         (cart_dout),
+  .cart_din          (cart_din),
+  .cart_ba           (cart_ba),
+  .cart_we           (cart_we),
+  .cart_addr         (cart_addr),
 
   .roml_select (roml_select),
   .romh_select (romh_select),
@@ -1095,20 +1099,20 @@ assign cpu_reset = cpu_reset_i || vic_cpu_reset || rst;
 // IRQ / NMI logic
 // ---------------------------------------------------------------------------
 
-assign cpu_irq = cia1_irq | vic_irq | (reu_irq && reu_present) | (ar_irq && cart_present);
-assign cpu_nmi = cia2_irq | kbd_restore_toggle | (ar_nmi && cart_present);
+assign cpu_irq = cia1_irq | vic_irq | (reu_irq && reu_present) | (cart_irq && cart_present);
+assign cpu_nmi = cia2_irq | kbd_restore_toggle | (cart_nmi && cart_present);
 
 // ---------------------------------------------------------------------------
 // Action Replay freeze
 // ---------------------------------------------------------------------------
 
-assign ar_freeze = kbd_freeze_pulse;
+assign cart_freeze = kbd_freeze_pulse;
 
 // ---------------------------------------------------------------------------
 // RAM / ROM to SDRAM mapping
 // ---------------------------------------------------------------------------
 
-reg [18:0] mem_addr;
+reg [21:0] mem_addr;
 reg        mem_raddr_lsb;
 
 always @(*) begin
@@ -1116,10 +1120,10 @@ always @(*) begin
   rom_char_ready   = 0;
   rom_kernal_ready = 0;
   rom_basic_ready  = 0;
-  rom_ar_ready     = 0;
-  ram_ar_ready     = 0;
+  rom_cart_ready     = 0;
+  ram_cart_ready     = 0;
 
-  mem_addr = {3'b000, 16'b0};
+  mem_addr = 0;
 
   mem_cmd_valid = 0;
   mem_cmd_we    = 0;
@@ -1130,44 +1134,44 @@ always @(*) begin
   if (ram_select) begin
     mem_cmd_valid = ram_enable;
     mem_cmd_we    = ram_we;
-    mem_addr      = {3'b000, ram_addr};
+    mem_addr      = {6'b000000, ram_addr};
     ram_ready     = mem_cmd_ready;
 
   end else if (rom_char_select) begin
     mem_cmd_valid  = rom_char_enable;
-    mem_addr       = {3'b001, 4'b0, rom_char_addr};
+    mem_addr       = {6'b000001, 3'b000, 1'b0, rom_char_addr};
     rom_char_ready = mem_cmd_ready;
 
   end else if (rom_kernal_select) begin
     mem_cmd_valid    = rom_kernal_enable;
-    mem_addr         = {3'b010, 3'b0, rom_kernal_addr};
+    mem_addr         = {6'b000001, 3'b001, rom_kernal_addr};
     rom_kernal_ready = mem_cmd_ready;
 
   end else if (rom_basic_select) begin
     mem_cmd_valid   = rom_basic_enable;
-    mem_addr        = {3'b011, 3'b0, rom_basic_addr};
+    mem_addr        = {6'b000001, 3'b010, rom_basic_addr};
     rom_basic_ready = mem_cmd_ready;
 
-  end else if (rom_ar_select) begin
-    mem_cmd_valid = rom_ar_enable;
-    mem_addr      = {3'b100, rom_ar_addr};
-    rom_ar_ready  = mem_cmd_ready;
+  end else if (rom_cart_select) begin
+    mem_cmd_valid  = rom_cart_enable;
+    mem_addr       = {1'b1, rom_cart_addr};
+    rom_cart_ready = mem_cmd_ready;
 
-  end else if (ram_ar_select) begin
-    mem_cmd_valid = ram_ar_enable;
-    mem_cmd_we    = ram_ar_we;
-    mem_addr      = {3'b101, ram_ar_addr};
-    ram_ar_ready  = mem_cmd_ready;
+  end else if (ram_cart_select) begin
+    mem_cmd_valid  = ram_cart_enable;
+    mem_cmd_we     = ram_cart_we;
+    mem_addr       = {6'b000001, 1'b1, ram_cart_addr};
+    ram_cart_ready = mem_cmd_ready;
   end
 
-  mem_cmd_addr = {SDRAM_BANK, 4'b0000, mem_addr[18:1]};
+  mem_cmd_addr = {SDRAM_BANK, 1'b0, mem_addr[21:1]};
 
   ram_dout        = mem_raddr_lsb ? mem_rdata[15:8] : mem_rdata[7:0];
   rom_char_dout   = mem_raddr_lsb ? mem_rdata[15:8] : mem_rdata[7:0];
   rom_kernal_dout = mem_raddr_lsb ? mem_rdata[15:8] : mem_rdata[7:0];
   rom_basic_dout  = mem_raddr_lsb ? mem_rdata[15:8] : mem_rdata[7:0];
-  rom_ar_dout     = mem_raddr_lsb ? mem_rdata[15:8] : mem_rdata[7:0];
-  ram_ar_dout     = mem_raddr_lsb ? mem_rdata[15:8] : mem_rdata[7:0];
+  rom_cart_dout   = mem_raddr_lsb ? mem_rdata[15:8] : mem_rdata[7:0];
+  ram_cart_dout   = mem_raddr_lsb ? mem_rdata[15:8] : mem_rdata[7:0];
 end
 
 wire mem_rdata_valid_combined;

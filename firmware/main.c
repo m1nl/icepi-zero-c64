@@ -33,6 +33,7 @@
 #include "heap.h"
 #include "spisdcard.h"
 
+#include "c64_cart.h"
 #include "c64_disk.h"
 #include "c64_event.h"
 #include "c64_tape.h"
@@ -230,32 +231,33 @@ static void c64_flag(int bit, int val) {
     c64_flags_save();
 }
 
-static int c64_cart_load(void) {
-    int ret;
+static int c64_default_cart_load(void) {
     FRESULT res;
     FILINFO fno;
 
     res = f_mount(&fs, "", 1);
     if (res != FR_OK) {
-        printf("c64_cart_load: sdcard mount failed (err %d)\n", res);
+        printf("c64_default_cart_load: sdcard mount failed (err %d)\n", res);
         return -1;
     }
 
-    res = f_stat(C64_AR_ROM_PATH, &fno);
+    res = f_stat(C64_CART_DEFAULT_PATH, &fno);
     f_unmount("");
 
     if (res != FR_OK) {
-        printf("c64_cart_load: cartridge ROM not found in path %s\n", C64_AR_ROM_PATH);
+        printf("c64_default_cart_load: cartridge not found in path %s\n", C64_CART_DEFAULT_PATH);
         return -1;
     }
 
-    ret = read_file_to_mem(C64_AR_ROM_PATH, (uint8_t *)C64_AR_ROM_BASE, 0, C64_AR_ROM_SIZE);
+    uint32_t flags = c64_control_flags_read();
+    int cart_present = flags & (1 << FLAG_CART_PRESENT);
 
-    if (ret > 0) {
-        printf("c64_cart_load: copied %d bytes from %s into %p\n", ret, C64_AR_ROM_PATH, (uint8_t *)C64_AR_ROM_BASE);
+    if (!cart_present) {
+        printf("c64_default_cart_load: ignoring default cartridge as cart_present flag is not set\n");
+        return -1;
     }
 
-    return ret;
+    return c64_cart_load(C64_CART_DEFAULT_PATH, (uint8_t *)C64_CART_ROM_BASE);
 }
 
 static int c64_c1541_load(void) {
@@ -323,9 +325,7 @@ static void c64_reset_cpu(void) {
     busy_wait(1);
 
     c64_init_mem((uint8_t *)C64_RAM_BASE, C64_RAM_SIZE, !cart_present);
-    if (cart_present) {
-        c64_init_mem((uint8_t *)C64_AR_RAM_BASE, C64_AR_RAM_SIZE, 0);
-    }
+    c64_init_mem((uint8_t *)C64_CART_RAM_BASE, C64_CART_RAM_SIZE, 0);
 
     busy_wait(1);
 
@@ -353,6 +353,8 @@ static void help_cmd(void) {
     puts("sync                  - Commit changes to D64 disk image");
     puts("tape_load <path>      - Load TAP file");
     puts("tape_eject            - Eject TAP file");
+    puts("cart_load <path>      - Load CRT file (triggers reset)");
+    puts("cart_eject            - Eject CRT file (triggers reset)");
     puts("flags                 - Show current flags");
     puts("flag <name> [0|1]     - Set or toggle a flag bit (auto-saved)");
     puts("init                  - Re-initialize C64 (required for certain flags)");
@@ -523,6 +525,35 @@ static void c64_tape_load_cmd(int argc, char **argv) {
     c64_tape_load(path);
 }
 
+static void c64_cart_load_cmd(int argc, char **argv) {
+    if (argc != 1) {
+        printf("usage: cart_load <path>\n");
+        return;
+    }
+
+    const char *path = argv[0];
+
+    uint32_t flags = c64_control_flags_read();
+    flags &= ~(1 << FLAG_CART_PRESENT);
+    c64_control_flags_write(flags);
+
+    if (c64_cart_load(path, (uint8_t *)C64_CART_ROM_BASE) == 0) {
+        uint32_t flags = c64_control_flags_read();
+        flags |= (1 << FLAG_CART_PRESENT);
+        c64_control_flags_write(flags);
+    }
+
+    c64_reset_cpu();
+}
+
+static void c64_cart_eject_cmd(void) {
+    uint32_t flags = c64_control_flags_read();
+    flags &= ~(1 << FLAG_CART_PRESENT);
+    c64_control_flags_write(flags);
+
+    c64_reset_cpu();
+}
+
 /*-----------------------------------------------------------------------*/
 /* Console service / Main                                                */
 /*-----------------------------------------------------------------------*/
@@ -600,6 +631,12 @@ static int console_service(void) {
         case COMMAND_TAPE_EJECT:
             c64_tape_eject();
             break;
+        case COMMAND_CART_LOAD:
+            c64_cart_load_cmd(argc, argv);
+            break;
+        case COMMAND_CART_EJECT:
+            c64_cart_eject_cmd();
+            break;
         case COMMAND_FLAGS:
             flags_cmd();
             break;
@@ -673,7 +710,7 @@ static void c64_init(void) {
 
     c64_flags_load();
 
-    if (c64_cart_load() < 0) {
+    if (c64_default_cart_load() < 0) {
         uint32_t flags = c64_control_flags_read();
         flags &= ~(1 << FLAG_CART_PRESENT);
         c64_control_flags_write(flags);

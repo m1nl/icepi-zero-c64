@@ -4,7 +4,7 @@ include $(SOC_DIRECTORY)/software/common.mak
 LIBS := $(filter-out liblitesdcard libfatfs,$(LIBS))
 PACKAGES := $(filter-out liblitesdcard libfatfs,$(PACKAGES))
 
-OBJECTS = crt0.o main.o embedded_cli.o heap.o tlsf.o spisdcard.o ff.o ffunicode.o ffsystem.o input.o c64_disk.o c64_tape.o power.o strstr.o
+OBJECTS = crt0.o main.o embedded_cli.o heap.o tlsf.o spisdcard.o ff.o ffunicode.o ffsystem.o input.o c64_disk.o c64_tape.o c64_cart.o power.o strstr.o
 CFLAGS += -Os -flto
 
 all: icepi-zero-c64.bin

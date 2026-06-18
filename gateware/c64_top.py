@@ -35,11 +35,13 @@ class C64Control(LiteXModule):
         self.vic_reset_req = CSRStorage(1, reset=0, description="C64 VIC reset request")
         self.cpu_reset_req = CSRStorage(1, reset=1, description="C64 CPU reset request")
         self.cpu_pause_req = CSRStorage(1, reset=0, description="C64 CPU puse request")
+
         self.block_ack = CSRStorage(1, reset=0, description="Block device ACK (toggle)")
-        self.img_mounted = CSRStorage(1, reset=0, description="Floppy disk image mounted (toggle)")
-        self.img_readonly = CSRStorage(1, reset=0, description="Floppy disk image read-only")
-        self.img_size = CSRStorage(32, reset=0, description="Floppy disk image size")
+
         self.img_id = CSRStorage(16, reset=0, description="Floppy disk image ID")
+        self.img_readonly = CSRStorage(1, reset=0, description="Floppy disk image read-only")
+        self.img_present = CSRStorage(1, reset=0, description="Floppy disk image present")
+        self.img_mounted = CSRStorage(1, reset=0, description="Floppy disk image mounted (toggle)")
 
         self.block_lba = CSRStatus(32, description="Block device LBA")
         self.block_cnt = CSRStatus(6, description="Block device count")
@@ -53,6 +55,8 @@ class C64Control(LiteXModule):
 
         self.ps2_character_valid = CSRStorage(1, reset=0, description="PS2 character valid (toggle)")
         self.ps2_character_data = CSRStorage(8, reset=0, description="PS2 character data")
+
+        self.cart_flags = CSRStorage(16, reset=0, description="Cartridge flags")
 
         self.submodules.ev = EventManager()
         self.ev.block_rd = EventSourcePulse(description="Block device read trigger")
@@ -267,10 +271,10 @@ class C64Top(Module):
             o_block_wr=self.control.ev.block_wr.trigger,
             i_block_ack=block_ack_pulse,
             # Floppy disk image
-            i_img_mounted=img_mounted_pulse,
-            i_img_readonly=self.control.img_readonly.storage,
-            i_img_size=self.control.img_size.storage,
             i_img_id=self.control.img_id.storage,
+            i_img_readonly=self.control.img_readonly.storage,
+            i_img_present=self.control.img_present.storage,
+            i_img_mounted=img_mounted_pulse,
             # Video overlay
             i_overlay_pixel=self.video_overlay.rgb,
             o_overlay_pixel_x=self.video_overlay.x,
@@ -291,6 +295,8 @@ class C64Top(Module):
             i_ps2_fifo_rd_data=ps2_fifo_rd_data,
             i_ps2_fifo_rd_valid=ps2_fifo_rd_valid,
             o_ps2_fifo_rd_en=ps2_fifo_rd_en,
+            # Cartridge
+            i_cart_flags=self.control.cart_flags.storage,
             # Other
             o_kbd_overlay_pulse=self.control.ev.kbd_overlay.trigger,
             o_kbd_reset_pulse=self.control.ev.kbd_reset_req.trigger,
@@ -311,7 +317,7 @@ class C64Top(Module):
         platform.add_source(os.path.join(gateware_dir, "c64_redip_cia.v"))
         platform.add_source(os.path.join(gateware_dir, "c64_redip_sid.v"))
         platform.add_source(os.path.join(gateware_dir, "c64_tape.v"))
-        platform.add_source(os.path.join(gateware_dir, "c64_action_replay.v"))
+        platform.add_source(os.path.join(gateware_dir, "c64_cartridge.v"))
         platform.add_source(os.path.join(gateware_dir, "usb_hid_host_dual.v"))
 
         # CDC primitives

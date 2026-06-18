@@ -28,10 +28,10 @@ module c64_c1541 #(
   input  wire        reset,
   input  wire        stall,
 
-  input  wire        img_mounted,
-  input  wire        img_readonly,
-  input  wire [31:0] img_size,
   input  wire [15:0] img_id,
+  input  wire        img_readonly,
+  input  wire        img_present,
+  input  wire        img_mounted,
 
   output wire        led,
   output wire        busy,
@@ -144,9 +144,10 @@ c1541_drv c1541_drv (
   .ph2_r(clk_r),
   .ph2_f(clk_f),
 
-  .img_mounted(img_mounted),
+  .img_id(img_id),
   .img_readonly(img_readonly),
-  .img_size(img_size),
+  .img_present(img_present),
+  .img_mounted(img_mounted),
 
   .drive_num(DRIVE_NUM),
   .led(led_drv),
@@ -173,8 +174,6 @@ c1541_drv c1541_drv (
   .block_rd(block_rd),
   .block_wr(block_wr),
   .block_ack(block_ack),
-
-  .img_id(img_id),
 
   .buff_addr(buff_addr),
   .buff_dout(buff_dout),

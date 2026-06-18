@@ -30,10 +30,10 @@ module c1541_drv (
   input  wire        ph2_r,
   input  wire        ph2_f,
 
-  input  wire        img_mounted,
-  input  wire        img_readonly,
-  input  wire [31:0] img_size,
   input  wire [15:0] img_id,
+  input  wire        img_readonly,
+  input  wire        img_present,
+  input  wire        img_mounted,
 
   input  wire  [1:0] drive_num,
   output wire        led,
@@ -72,29 +72,25 @@ module c1541_drv (
 
 assign led = act;
 
-reg        present    = 0;
-reg        readonly   = 1;
-reg        disk_ready = 0;
-reg [24:0] ch_timeout = 25'h1FFFFFF;
+reg        img_ready = 0;
+reg [24:0] img_delay = 25'h1FFFFFF;
 
 always @(posedge clk) begin
-  if (reset || img_mounted) begin
-    present    <= img_size != 32'd0;
-    readonly   <= img_readonly;
-    disk_ready <= 0;
-    ch_timeout <= 25'h1FFFFFF;
+  if (reset || img_mounted || !img_present) begin
+    img_ready <= 0;
+    img_delay <= 25'h1FFFFFF;
 
-  end else if (ch_timeout == 25'd0)
-    disk_ready <= present;
+  end else if (img_delay == 0)
+    img_ready <= 1;
   else if (gcr_ce)
-    ch_timeout <= ch_timeout - 25'd1;
+    img_delay <= img_delay - 1;
 end
 
 wire       mode;  // read / write
 wire [1:0] stp;
 wire       act;
 wire [1:0] freq;
-wire       wps_n = ~readonly ^ ch_timeout[23];
+wire       wps_n = ~img_readonly ^ img_delay[23];
 
 reg [6:0] track;
 
@@ -157,7 +153,7 @@ c1541_gcr c1541_gcr (
   .wps_n(wps_n),
   .sync_n(gcr_sync_n),
   .byte_n(gcr_byte_n),
-  .busy(busy || !disk_ready),
+  .busy(busy || !img_ready),
 
   .img_mounted(img_mounted),
   .img_id(img_id),
@@ -220,7 +216,7 @@ always @(posedge clk) begin
   end else if (img_mounted) begin
     track_modified <= 0;
 
-  end else if (disk_ready) begin
+  end else if (img_ready) begin
     track <= track_next;
 
     if (track_modified || buff_we) begin

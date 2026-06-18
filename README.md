@@ -178,6 +178,8 @@ The LiteX/VexRiscv SoC exposes a serial console (`icepi-c64>` prompt). The `help
 | `sync`                    | Commit any pending writes on a read-write mounted `.d64` back to SD card.   |
 | `tape_load <path>`        | Attach a `.tap` tape image to the emulated Datasette.                       |
 | `tape_eject`              | Detach the current `.tap` image.                                            |
+| `cart_load <path>`        | Load CRT file (triggers reset).                                             |
+| `cart_eject`              | Eject CRT file (triggers reset).                                            |
 | `flags`                   | Show every runtime flag, its bit number, current value and description.     |
 | `flag <name> [0\|1]`      | Set (`1`), clear (`0`), or toggle (no argument) a flag; state is persisted. |
 | `reset`                   | Reset the emulated C64 CPU (clears RAM to the cartridge-dependent pattern). |
@@ -204,18 +206,39 @@ The `flag <name> [0|1]` command (and the persisted JSON file) operate on the fol
 | `joy_button_space`      | Maps the gamepad's second fire button to the `Space` key (useful for games using Space as a secondary fire).  |
 | `joy_emulation_0`       | Allows using the host keyboard as joystick port 1 (cursor keys + `F`/`Space` for fire).                       |
 | `joy_emulation_1`       | Same as above, but for joystick port 2.                                                                       |
-| `cart_present`          | Indicates that AR / RR cartridge is present; ignored if `/c64_roms/ar6_pal.bin` is not present upon reboot    |
-| `reu_present`           | Indicates that 4MiB REU is present; changes to this flag require `reset` to take effect   .                   |
+| `cart_present`          | Indicates that cartridge is present; cleared upon reboot when `/c64_roms/default.crt` is not present          |
+| `reu_present`           | Indicates that 4MiB REU is present; changes to this flag require `reset` to take effect.                      |
 | `c1541_rom_ext`         | Extended C1541 ROM (DolphinDOS)                                                                               |
 | `iec_master_disconnect` | Disconnects the C64 from the virtual IEC bus.                                                                 |
 
 ## REU support
 
-The core includes 4 MiB REU support, which is enabled whenever the `reu_present` flag is set. Since AR IO2 conflicts with REU registers, some additional arbitration logic is used to handle access to $DF00–$DFFF when both `cart_present` and `reu_present` flags are enabled. If you encounter any issues, please disable one of the flags or switch to Retro Replay - `rr6_pal.bin` or `rr6_pal_reu.bin`, both are REU-compatible and the latter uses REU for built-in assembler. The REU implementation has been validated and confirmed to work with the following programs:
+The core includes 4 MiB REU support, which is enabled whenever the `reu_present` flag is set. Since AR IO2 conflicts with REU registers, some additional arbitration logic is used to handle access to $DF00–$DFFF when both `cart_present` and `reu_present` flags are enabled. If you encounter any issues, please disable one of the flags or switch to Retro Replay - `rr6_pal.crt` or `rr6_pal_reu.crt`, both are REU-compatible and the latter uses REU for built-in assembler. The REU implementation has been validated and confirmed to work with the following programs:
 - memtest (does not work when AR is enabled; https://csdb.dk/release/?id=157941)
 - Sonic the Hedgehog (https://csdb.dk/release/?id=212523)
 - TreuLove (https://csdb.dk/release/?id=144105)
 - fREUd (https://csdb.dk/release/?id=149560)
+
+## Cartridge support
+
+Implementation supports the following cartrige (CRT file) types:
+
+| ID | Name                     |
+| -- | ------------------------ |
+|  0 | Normal (8 KiB / 16 KiB)  |
+|  1 | Action Replay            |
+|  4 | Simons Basic             |
+|  5 | Ocean                    |
+| 15 | C64GS                    |
+| 17 | Dinamic                  |
+| 19 | Magic Desk               |
+| 32 | Easy Flash (read-only)   |
+| 33 | Easy Flash (read-only)   |
+| 36 | Retro Replay             |
+| 60 | GMod2                    |
+| 85 | Magic Desk 2             |
+
+Cartridge can be loaded with `cart_load` command. If `cart_present` flag is set, by default `/c64_roms/default.crt` is loaded upon reboot.
 
 ## DolphinDOS support
 

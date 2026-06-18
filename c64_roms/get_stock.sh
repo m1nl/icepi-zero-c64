@@ -29,10 +29,9 @@ wget "https://csdb.dk/release/download.php?id=243774" \
     --header "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36" \
     -O dist/rr38p-tmp12-patched.zip
 
-python3 ar_extract.py dist/arv6-cl-fix.crt dist/ar6_pal.bin
-rm -f dist/arv6-cl-fix.crt
-
 unzip -j dist/rr38p-tmp12-patched.zip rr38p-tmp12-patched/rr38p-tmp12.bin rr38p-tmp12-patched/rr38p-tmp12reu.bin
 rm -f dist/rr38p-tmp12-patched.zip
-mv rr38p-tmp12.bin dist/rr6_pal.bin
-mv rr38p-tmp12reu.bin dist/rr6_pal_reu.bin
+cartconv -v -t 36 -i rr38p-tmp12.bin -o dist/rr6_pal.crt
+cartconv -v -t 36 -i rr38p-tmp12reu.bin -o dist/rr6_pal_reu.crt
+
+cp dist/arv6-cl-fix.crt dist/default.crt

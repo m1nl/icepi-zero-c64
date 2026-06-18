@@ -4,12 +4,12 @@
 #define C64_RAM_BASE 0x41800000
 #define C64_RAM_SIZE 0x10000
 
-#define C64_AR_ROM_BASE 0x41840000
-#define C64_AR_ROM_SIZE 0x10000
-#define C64_AR_ROM_PATH "/c64_roms/ar6_pal.bin"
+#define C64_CART_ROM_BASE 0x41a00000
+#define C64_CART_ROM_SIZE 0x200000
+#define C64_CART_DEFAULT_PATH "/c64_roms/default.crt"
 
-#define C64_AR_RAM_BASE 0x41850000
-#define C64_AR_RAM_SIZE 0x10000
+#define C64_CART_RAM_BASE 0x41818000
+#define C64_CART_RAM_SIZE 0x8000
 
 #define C64_C1541_BASE 0x60000000
 #define C64_C1541_SIZE 0x6000
@@ -47,6 +47,8 @@ enum {
     COMMAND_FORMAT,
     COMMAND_TAPE_LOAD,
     COMMAND_TAPE_EJECT,
+    COMMAND_CART_LOAD,
+    COMMAND_CART_EJECT,
     COMMAND_FLAGS,
     COMMAND_FLAG,
     COMMAND_CONSOLE,
@@ -58,9 +60,10 @@ enum {
     COMMAND_MAX
 };
 
-const char *commands[COMMAND_MAX] = {"help", "reboot", "sdcard_reset", "ls",         "hexdump", "mount", "umount",
-                                     "sync", "format", "tape_load",    "tape_eject", "flags",   "flag",  "console",
-                                     "init", "reset",  "pause",        "resume",     "power"};
+const char *commands[COMMAND_MAX] = {"help",       "reboot", "sdcard_reset", "ls",        "hexdump",    "mount",
+                                     "umount",     "sync",   "format",       "tape_load", "tape_eject", "cart_load",
+                                     "cart_eject", "flags",  "flag",         "console",   "init",       "reset",
+                                     "pause",      "resume", "power"};
 
 const struct {
     const char *name;
