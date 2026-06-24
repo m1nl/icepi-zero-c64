@@ -49,6 +49,10 @@ The 8BitDo retro keyboard does not send report events even after successful enum
 
 Other low-speed and full-speed USB 2.0 HID devices should generally work as well. However, avoid composite devices that include built-in USB hub or keyboard + mouse functionality. Each port supports only a single device, as it has a separate USB soft controller attached to it.
 
+## SD card support
+
+There have been reports that some non-SDHC cards do not work properly with LiteX. If you encounter issues during the LiteX boot process, please make sure you are using an SDHC card. If the problem persists, feel free to open an issue on GitHub.
+
 ## Building
 
 ### Prerequisites
