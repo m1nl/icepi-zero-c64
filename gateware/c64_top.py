@@ -359,19 +359,30 @@ class C64Top(Module):
         platform.add_source(os.path.join(vicii_kawari_hdl_dir, "vicii.v"))
         platform.add_source(os.path.join(vicii_kawari_hdl_dir, "common.vh"))
 
-        # reDIP-CIA core
-        redip_cia_hdl_dir = os.path.join(gateware_dir, "c64_redip_cia", "reDIP-CIA", "gateware")
-        platform.add_source(os.path.join(redip_cia_hdl_dir, "cia_pkg.sv"))
-        platform.add_source(os.path.join(redip_cia_hdl_dir, "cia_edgedet.sv"))
-        platform.add_source(os.path.join(redip_cia_hdl_dir, "cia_ports.sv"))
-        platform.add_source(os.path.join(redip_cia_hdl_dir, "cia_timer.sv"))
-        platform.add_source(os.path.join(redip_cia_hdl_dir, "cia_tod.sv"))
-        platform.add_source(os.path.join(redip_cia_hdl_dir, "cia_serial.sv"))
-        platform.add_source(os.path.join(redip_cia_hdl_dir, "cia_interrupt.sv"))
-        platform.add_source(os.path.join(redip_cia_hdl_dir, "cia_control.sv"))
-        platform.add_source(os.path.join(redip_cia_hdl_dir, "bcd_add.sv"))
-        platform.add_source(os.path.join(redip_cia_hdl_dir, "bcd_update.sv"))
+        # reDIP-CIA CIA core
+        redip_cia_cia_hdl_dir = os.path.join(gateware_dir, "c64_redip_cia", "reDIP-CIA", "gateware", "CIA")
+        platform.add_source(os.path.join(redip_cia_cia_hdl_dir, "cia_pkg.sv"))
+        platform.add_source(os.path.join(redip_cia_cia_hdl_dir, "bcd_add.sv"))
+        platform.add_source(os.path.join(redip_cia_cia_hdl_dir, "bcd_update.sv"))
+        platform.add_source(os.path.join(redip_cia_cia_hdl_dir, "cia_control.sv"))
+        platform.add_source(os.path.join(redip_cia_cia_hdl_dir, "cia_edgedet.sv"))
+        platform.add_source(os.path.join(redip_cia_cia_hdl_dir, "cia_interrupt.sv"))
+        platform.add_source(os.path.join(redip_cia_cia_hdl_dir, "cia_ports.sv"))
+        platform.add_source(os.path.join(redip_cia_cia_hdl_dir, "cia_serial.sv"))
+        platform.add_source(os.path.join(redip_cia_cia_hdl_dir, "cia_timer.sv"))
+        platform.add_source(os.path.join(redip_cia_cia_hdl_dir, "cia_tod.sv"))
         platform.add_source(os.path.join(gateware_dir, "c64_redip_cia", "cia_core.sv"))
+
+        # reDIP-CIA VIA core
+        redip_cia_via_hdl_dir = os.path.join(gateware_dir, "c64_redip_cia", "reDIP-CIA", "gateware", "VIA")
+        platform.add_source(os.path.join(redip_cia_via_hdl_dir, "via_pkg.sv"))
+        platform.add_source(os.path.join(redip_cia_via_hdl_dir, "via_control.sv"))
+        platform.add_source(os.path.join(redip_cia_via_hdl_dir, "via_edgedet.sv"))
+        platform.add_source(os.path.join(redip_cia_via_hdl_dir, "via_interrupt.sv"))
+        platform.add_source(os.path.join(redip_cia_via_hdl_dir, "via_ports.sv"))
+        platform.add_source(os.path.join(redip_cia_via_hdl_dir, "via_serial.sv"))
+        platform.add_source(os.path.join(redip_cia_via_hdl_dir, "via_timers.sv"))
+        platform.add_source(os.path.join(gateware_dir, "c64_redip_cia", "via_core.sv"))
 
         # reDIP-SID core
         redip_sid_hdl_dir = os.path.join(gateware_dir, "c64_redip_sid", "reDIP-SID", "gateware")
