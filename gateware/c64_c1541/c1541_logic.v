@@ -10,11 +10,13 @@
 `default_nettype none
 `timescale 1 ns / 1 ps
 module c1541_logic #(
-  parameter CPU_MODEL = 1
+  parameter CPU_MODEL = 1,
+  parameter VIA_MODEL = 1
 ) (
   input wire clk,
   input wire reset,
 
+  input wire ph2,
   input wire ph2_r,
   input wire ph2_f,
 
@@ -200,42 +202,81 @@ assign iec_clk_out  = ~(uc1_pb_o[3] | ~uc1_pb_oe[3]);
 assign par_stb_out  = ext_en ? (uc1_ca2_o | ~uc1_ca2_oe) : 1'b1;
 assign par_data_out = ext_en ? (uc1_pa_o | ~uc1_pa_oe)   : 8'hff;
 
-iecdrv_via6522 uc1 (
-  .clock(clk),
-  .rising(ph2_r),
-  .falling(ph2_f),
-  .reset(reset),
+generate
+  if (VIA_MODEL) begin : UC1_REDIP
+    c64_redip_via uc1 (
+      .clk(clk),
+      .reset(reset),
+      .clk_phi(ph2),
+      .cen(~uc1_cs),
+      .we(~cpu_rwn),
 
-  .addr(cpu_a[3:0]),
-  .wen(~cpu_rwn & uc1_cs),
-  .ren(cpu_rwn & uc1_cs),
-  .data_in(cpu_do),
-  .data_out(uc1_do),
+      .addr(cpu_a[3:0]),
+      .din(cpu_do),
+      .dout(uc1_do),
 
-  .port_a_o(uc1_pa_o),
-  .port_a_t(uc1_pa_oe),
-  .port_a_i((ext_en ? par_data_in : {7'h7f, tr00_sense_n}) & (uc1_pa_o | ~uc1_pa_oe)),
+      .pa_in((ext_en ? par_data_in : {7'h7f, tr00_sense_n}) & (uc1_pa_o | ~uc1_pa_oe)),
+      .pa_out(uc1_pa_o),
+      .ddra(uc1_pa_oe),
 
-  .port_b_o(uc1_pb_o),
-  .port_b_t(uc1_pb_oe),
-  .port_b_i({~iec_atn_in, ds, 2'b11, ~iec_clk_in, 1'b1, ~iec_data_in} & (uc1_pb_o | ~uc1_pb_oe)),
+      .pb_in({~iec_atn_in, ds, 2'b11, ~iec_clk_in, 1'b1, ~iec_data_in} & (uc1_pb_o | ~uc1_pb_oe)),
+      .pb_out(uc1_pb_o),
+      .ddrb(uc1_pb_oe),
 
-  .ca1_i(~iec_atn_in),
+      .ca1_in(~iec_atn_in),
+      .ca2_in(uc1_ca2_o | ~uc1_ca2_oe),
+      .ca2_out(uc1_ca2_o),
 
-  .ca2_o(uc1_ca2_o),
-  .ca2_t(uc1_ca2_oe),
-  .ca2_i(uc1_ca2_o | ~uc1_ca2_oe),
+      .cb1_in((ext_en ? par_stb_in : 1'b1) & (uc1_cb1_o | ~uc1_cb1_oe)),
+      .cb1_out(uc1_cb1_o),
+      .ddrcb1(uc1_cb1_oe),
 
-  .cb1_o(uc1_cb1_o),
-  .cb1_t(uc1_cb1_oe),
-  .cb1_i((ext_en ? par_stb_in : 1'b1) & (uc1_cb1_o | ~uc1_cb1_oe)),
+      .cb2_in(uc1_cb2_o | ~uc1_cb2_oe),
+      .cb2_out(uc1_cb2_o),
+      .ddrcb2(uc1_cb2_oe),
 
-  .cb2_o(uc1_cb2_o),
-  .cb2_t(uc1_cb2_oe),
-  .cb2_i(uc1_cb2_o | ~uc1_cb2_oe),
+      .irq(uc1_irq)
+    );
+    assign uc1_ca2_oe = 1'b1;
+  end else begin : UC1_VIA6522
+    iecdrv_via6522 uc1 (
+      .clock(clk),
+      .rising(ph2_r),
+      .falling(ph2_f),
+      .reset(reset),
 
-  .irq(uc1_irq)
-);
+      .addr(cpu_a[3:0]),
+      .wen(~cpu_rwn & uc1_cs),
+      .ren(cpu_rwn & uc1_cs),
+      .data_in(cpu_do),
+      .data_out(uc1_do),
+
+      .port_a_o(uc1_pa_o),
+      .port_a_t(uc1_pa_oe),
+      .port_a_i((ext_en ? par_data_in : {7'h7f, tr00_sense_n}) & (uc1_pa_o | ~uc1_pa_oe)),
+
+      .port_b_o(uc1_pb_o),
+      .port_b_t(uc1_pb_oe),
+      .port_b_i({~iec_atn_in, ds, 2'b11, ~iec_clk_in, 1'b1, ~iec_data_in} & (uc1_pb_o | ~uc1_pb_oe)),
+
+      .ca1_i(~iec_atn_in),
+
+      .ca2_o(uc1_ca2_o),
+      .ca2_t(uc1_ca2_oe),
+      .ca2_i(uc1_ca2_o | ~uc1_ca2_oe),
+
+      .cb1_o(uc1_cb1_o),
+      .cb1_t(uc1_cb1_oe),
+      .cb1_i((ext_en ? par_stb_in : 1'b1) & (uc1_cb1_o | ~uc1_cb1_oe)),
+
+      .cb2_o(uc1_cb2_o),
+      .cb2_t(uc1_cb2_oe),
+      .cb2_i(uc1_cb2_o | ~uc1_cb2_oe),
+
+      .irq(uc1_irq)
+    );
+  end
+endgenerate
 
 // UC3 (VIA6522) signals
 wire [7:0] uc3_pa_o;
@@ -259,42 +300,81 @@ assign mtr  = uc3_pb_o[2] | ~uc3_pb_oe[2];
 assign act  = uc3_pb_o[3] | ~uc3_pb_oe[3];
 assign freq = uc3_pb_o[6:5] | ~uc3_pb_oe[6:5];
 
-iecdrv_via6522 uc3 (
-  .clock  (clk),
-  .rising (ph2_r),
-  .falling(ph2_f),
-  .reset  (reset),
+generate
+  if (VIA_MODEL) begin : UC3_REDIP
+    c64_redip_via uc3 (
+      .clk(clk),
+      .reset(reset),
+      .clk_phi(ph2),
+      .cen(~uc3_cs),
+      .we(~cpu_rwn),
 
-  .addr(cpu_a[3:0]),
-  .wen(~cpu_rwn & uc3_cs),
-  .ren(cpu_rwn & uc3_cs),
-  .data_in(cpu_do),
-  .data_out(uc3_do),
+      .addr(cpu_a[3:0]),
+      .din(cpu_do),
+      .dout(uc3_do),
 
-  .port_a_o(uc3_pa_o),
-  .port_a_t(uc3_pa_oe),
-  .port_a_i(din & (uc3_pa_o | ~uc3_pa_oe)),
+      .pa_in(din & (uc3_pa_o | ~uc3_pa_oe)),
+      .pa_out(uc3_pa_o),
+      .ddra(uc3_pa_oe),
 
-  .port_b_o(uc3_pb_o),
-  .port_b_t(uc3_pb_oe),
-  .port_b_i({sync_n, 2'b11, wps_n, 4'b1111} & (uc3_pb_o | ~uc3_pb_oe)),
+      .pb_in({sync_n, 2'b11, wps_n, 4'b1111} & (uc3_pb_o | ~uc3_pb_oe)),
+      .pb_out(uc3_pb_o),
+      .ddrb(uc3_pb_oe),
 
-  .ca1_i(cpu_so_n),
+      .ca1_in(cpu_so_n),
+      .ca2_in(uc3_ca2_o | ~uc3_ca2_oe),
+      .ca2_out(uc3_ca2_o),
 
-  .ca2_o(uc3_ca2_o),
-  .ca2_t(uc3_ca2_oe),
-  .ca2_i(uc3_ca2_o | ~uc3_ca2_oe),
+      .cb1_in(uc3_cb1_o | ~uc3_cb1_oe),
+      .cb1_out(uc3_cb1_o),
+      .ddrcb1(uc3_cb1_oe),
 
-  .cb1_o(uc3_cb1_o),
-  .cb1_t(uc3_cb1_oe),
-  .cb1_i(uc3_cb1_o | ~uc3_cb1_oe),
+      .cb2_in(uc3_cb2_o | ~uc3_cb2_oe),
+      .cb2_out(uc3_cb2_o),
+      .ddrcb2(uc3_cb2_oe),
 
-  .cb2_o(uc3_cb2_o),
-  .cb2_t(uc3_cb2_oe),
-  .cb2_i(uc3_cb2_o | ~uc3_cb2_oe),
+      .irq(uc3_irq)
+    );
+    assign uc3_ca2_oe = 1'b1;
+  end else begin : UC3_VIA6522
+    iecdrv_via6522 uc3 (
+      .clock  (clk),
+      .rising (ph2_r),
+      .falling(ph2_f),
+      .reset  (reset),
 
-  .irq(uc3_irq)
-);
+      .addr(cpu_a[3:0]),
+      .wen(~cpu_rwn & uc3_cs),
+      .ren(cpu_rwn & uc3_cs),
+      .data_in(cpu_do),
+      .data_out(uc3_do),
+
+      .port_a_o(uc3_pa_o),
+      .port_a_t(uc3_pa_oe),
+      .port_a_i(din & (uc3_pa_o | ~uc3_pa_oe)),
+
+      .port_b_o(uc3_pb_o),
+      .port_b_t(uc3_pb_oe),
+      .port_b_i({sync_n, 2'b11, wps_n, 4'b1111} & (uc3_pb_o | ~uc3_pb_oe)),
+
+      .ca1_i(cpu_so_n),
+
+      .ca2_o(uc3_ca2_o),
+      .ca2_t(uc3_ca2_oe),
+      .ca2_i(uc3_ca2_o | ~uc3_ca2_oe),
+
+      .cb1_o(uc3_cb1_o),
+      .cb1_t(uc3_cb1_oe),
+      .cb1_i(uc3_cb1_o | ~uc3_cb1_oe),
+
+      .cb2_o(uc3_cb2_o),
+      .cb2_t(uc3_cb2_oe),
+      .cb2_i(uc3_cb2_o | ~uc3_cb2_oe),
+
+      .irq(uc3_irq)
+    );
+  end
+endgenerate
 
 endmodule
 `default_nettype wire

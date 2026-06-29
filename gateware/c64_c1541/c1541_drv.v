@@ -25,8 +25,9 @@
 module c1541_drv (
   input  wire        clk,
   input  wire        reset,
-
   input  wire        gcr_ce,
+
+  input  wire        ph2,
   input  wire        ph2_r,
   input  wire        ph2_f,
 
@@ -98,6 +99,7 @@ c1541_logic c1541_logic (
   .clk(clk),
   .reset(reset),
 
+  .ph2(ph2),
   .ph2_r(ph2_r),
   .ph2_f(ph2_f),
 

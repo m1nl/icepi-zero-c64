@@ -82,8 +82,9 @@ reg [3:0]               clock_phase = 0;
 
 assign gcr_ce = (gcr_ce_cnt >= FREQUENCY_NORMALIZED[GCR_CNT_WIDTH-1:0]) && !stall;
 
-assign clk_r  = (clock_phase == 4'd0) && gcr_ce;
-assign clk_f  = (clock_phase == 4'd8) && gcr_ce;
+assign clk_r   = (clock_phase == 4'd0) && gcr_ce;
+assign clk_f   = (clock_phase == 4'd8) && gcr_ce;
+assign clk_phi = (clock_phase >= 4'd0 && clock_phase < 4'd8);
 
 always @(posedge clk) begin
   if (reset) begin
@@ -139,8 +140,9 @@ assign busy = busy_drv && !reset;
 c1541_drv c1541_drv (
   .clk(clk),
   .reset(reset),
-
   .gcr_ce(gcr_ce),
+
+  .ph2(clk_phi),
   .ph2_r(clk_r),
   .ph2_f(clk_f),
 
