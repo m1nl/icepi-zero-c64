@@ -316,6 +316,7 @@ class C64Top(Module):
         platform.add_source(os.path.join(gateware_dir, "c64_ram.v"))
         platform.add_source(os.path.join(gateware_dir, "c64_redip_cia.v"))
         platform.add_source(os.path.join(gateware_dir, "c64_redip_sid.v"))
+        platform.add_source(os.path.join(gateware_dir, "c64_redip_via.v"))
         platform.add_source(os.path.join(gateware_dir, "c64_tape.v"))
         platform.add_source(os.path.join(gateware_dir, "c64_cartridge.v"))
         platform.add_source(os.path.join(gateware_dir, "usb_hid_host_dual.v"))
