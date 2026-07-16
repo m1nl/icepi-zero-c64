@@ -11,7 +11,7 @@
 `timescale 1 ns / 1 ps
 module c1541_logic #(
   parameter CPU_MODEL = 1,
-  parameter VIA_MODEL = 1
+  parameter VIA_MODEL = 0
 ) (
   input wire clk,
   input wire reset,
