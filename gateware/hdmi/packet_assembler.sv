@@ -21,6 +21,8 @@ begin
         counter <= 5'd0;
     else if (data_island_period)
         counter <= counter + 5'd1;
+    else
+        counter <= 5'd0;
 end
 // Convert sub into SystemVerilog array
 wire [55:0] sub [3:0];
