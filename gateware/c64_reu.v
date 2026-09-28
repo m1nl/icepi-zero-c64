@@ -43,7 +43,7 @@ module c64_reu (
   output wire        reu_dma_active,
 
   // FF00 DMA trigger
-  input              ff00_trigger,
+  input  wire        ff00_trigger,
 
   // IRQ to CPU
   output wire        irq,
