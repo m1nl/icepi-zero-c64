@@ -20,8 +20,11 @@
 #ifndef INPUT_H
 #define INPUT_H
 
+#include <stdint.h>
+
 int c64_console(void);
 void input_register_alt_callback(void (*callback)(char));
+void input_register_reset_callback(void (*callback)(void));
 char input_nonblock(void);
 char input_block(void);
 void input_isr(uint32_t pending);

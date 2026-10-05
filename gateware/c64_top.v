@@ -55,6 +55,13 @@ module c64_top #(
 
   // LEDs
   output wire [4:0] leds,
+  output wire led_g,
+  output wire led_y,
+  output wire led_r,
+
+  // Optional active-low external joysticks, LSB first UDLRAB; tie high when absent.
+  input wire [5:0] joya,
+  input wire [5:0] joyb,
 
   // TMDS
   input  wire       tmds_clk,
@@ -77,6 +84,10 @@ module c64_top #(
 
   // Flags
   input  wire [15:0] flags,
+
+  // Active-high FPGA Companion state: UDLRABXY, Select, Start (LSB first).
+  input  wire [9:0] companion_joy_a,
+  input  wire [9:0] companion_joy_b,
 
   // IEC serial bus
   output wire iec_data_out,
@@ -431,10 +442,38 @@ c64_redip_cia #(
 
 wire       kbd_restore_toggle;
 wire       kbd_freeze_pulse;
+
 wire       joy_pot_x;
 wire       joy_pot_y;
+
 wire [9:0] joy_a;
 wire [9:0] joy_b;
+
+wire [9:0] usb_joy_a;
+wire [9:0] usb_joy_b;
+
+(* async_reg = "true" *) reg [5:0] joya_meta, joyb_meta;
+(* async_reg = "true" *) reg [5:0] joya_sync, joyb_sync;
+
+always @(posedge clk) begin
+  if (rst) begin
+    joya_meta <= 6'b111111;
+    joyb_meta <= 6'b111111;
+    joya_sync <= 6'b111111;
+    joyb_sync <= 6'b111111;
+  end else begin
+    joya_meta <= joya;
+    joyb_meta <= joyb;
+    joya_sync <= joya_meta;
+    joyb_sync <= joyb_meta;
+  end
+end
+
+// GPIOs are ordered UDLRAB like the USB gamepad signals below.
+// Combine external contacts with USB gamepads before existing joystick routing.
+assign joy_a = usb_joy_a | companion_joy_a | {4'b0000, ~joya_sync};
+assign joy_b = usb_joy_b | companion_joy_b | {4'b0000, ~joyb_sync};
+
 wire       hid_key_report;
 wire [7:0] hid_key_modifiers;
 wire       hid_key_alt;
@@ -675,26 +714,26 @@ usb_hid_host_dual usb_hid_host_dual_0 (
   .connerr_1     (),
   .connected_0   (usb_connected[0]),
   .connected_1   (usb_connected[1]),
-  .game_u_0      (joy_a[0]),
-  .game_d_0      (joy_a[1]),
-  .game_l_0      (joy_a[2]),
-  .game_r_0      (joy_a[3]),
-  .game_a_0      (joy_a[4]),
-  .game_b_0      (joy_a[5]),
-  .game_x_0      (joy_a[6]),
-  .game_y_0      (joy_a[7]),
-  .game_sel_0    (joy_a[8]),
-  .game_sta_0    (joy_a[9]),
-  .game_u_1      (joy_b[0]),
-  .game_d_1      (joy_b[1]),
-  .game_l_1      (joy_b[2]),
-  .game_r_1      (joy_b[3]),
-  .game_a_1      (joy_b[4]),
-  .game_b_1      (joy_b[5]),
-  .game_x_1      (joy_b[6]),
-  .game_y_1      (joy_b[7]),
-  .game_sel_1    (joy_b[8]),
-  .game_sta_1    (joy_b[9]),
+  .game_u_0      (usb_joy_a[0]),
+  .game_d_0      (usb_joy_a[1]),
+  .game_l_0      (usb_joy_a[2]),
+  .game_r_0      (usb_joy_a[3]),
+  .game_a_0      (usb_joy_a[4]),
+  .game_b_0      (usb_joy_a[5]),
+  .game_x_0      (usb_joy_a[6]),
+  .game_y_0      (usb_joy_a[7]),
+  .game_sel_0    (usb_joy_a[8]),
+  .game_sta_0    (usb_joy_a[9]),
+  .game_u_1      (usb_joy_b[0]),
+  .game_d_1      (usb_joy_b[1]),
+  .game_l_1      (usb_joy_b[2]),
+  .game_r_1      (usb_joy_b[3]),
+  .game_a_1      (usb_joy_b[4]),
+  .game_b_1      (usb_joy_b[5]),
+  .game_x_1      (usb_joy_b[6]),
+  .game_y_1      (usb_joy_b[7]),
+  .game_sel_1    (usb_joy_b[8]),
+  .game_sta_1    (usb_joy_b[9]),
   .key_report    (hid_key_report),
   .key_modifiers (hid_key_modifiers),
   .key_0         (hid_key_0),
@@ -1203,6 +1242,9 @@ assign vic_stall = !mem_rdata_valid_combined && (vic_phi2_n || vic_phi2_p);
 reg [2:0] led_dim_counter;
 reg [4:0] leds_r;
 
+wire [4:0] leds_i = {usb_connected[0] || usb_connected[1], tape_act, c1541_led,
+        cpu_paused || reu_dma_active, !cpu_reset && !vic_reset_req};
+
 always @(posedge clk) begin
   if (rst) begin
     led_dim_counter <= 0;
@@ -1213,8 +1255,7 @@ always @(posedge clk) begin
     leds_r          <= 5'b0;
 
     if (led_dim_counter == 0) begin
-      leds_r <= {usb_connected[0] || usb_connected[1], tape_act, c1541_led,
-        cpu_paused || reu_dma_active, !cpu_reset && !vic_reset_req};
+      leds_r <= leds_i;
     end
   end
 end
@@ -1227,6 +1268,10 @@ always @(posedge clk) begin
 end
 
 assign leds = leds_r;
+
+assign led_g = leds_i[0];  // C64 running
+assign led_y = leds_i[2];  // 1541 activity
+assign led_r = leds_i[1];  // CPU paused / REU DMA
 
 assign debug = 9'bzzzzzzzzz;
 

@@ -33,6 +33,7 @@
 #include "c64_event.h"
 
 #include "input.h"
+#include "spi_hid.h"
 
 static volatile uint8_t hid_keycode = 0;
 static volatile uint8_t hid_ascii_pending = 0;
@@ -48,6 +49,12 @@ static volatile uint8_t alt_callback_pending = 0;
 #define HID_MOD_CTRL (0x01 | 0x10)
 
 static void (*alt_callback)(char) = 0;
+static void (*reset_callback)(void) = 0;
+static uint8_t spi_modifiers;
+static uint8_t spi_forwarded[32];
+static uint8_t spi_print_down, spi_pause_down;
+#define OVERLAY_MASK (1u << 6)
+static void handle_spi_key(uint8_t event, uint8_t usage, const uint8_t *ps2, uint8_t length);
 
 static const uint8_t hid_to_ascii[128] = {
     0,    0,   0,    0,    'a',  'b',  'c', 'd', 'e', 'f', 'g', 'h',  'i', 'j', 'k',  'l', 'm', 'n', 'o',
@@ -81,12 +88,16 @@ static int8_t hid_keycode_to_fkey(uint8_t keycode) {
     return -1;
 }
 
-static uint8_t hid_keycode_to_control(uint8_t keycode, uint8_t modifiers) {
+static uint8_t hid_keycode_to_control(uint8_t keycode) {
     switch (keycode) {
         case 0x51:
-            return 'B'; // up
+            return 'B'; // down
         case 0x52:
-            return 'A'; // down
+            return 'A'; // up
+        case 0x50:
+            return 'D'; // left
+        case 0x4f:
+            return 'C'; // right
     }
     return 0;
 }
@@ -94,7 +105,9 @@ static uint8_t hid_keycode_to_control(uint8_t keycode, uint8_t modifiers) {
 static void write_ps2(char c) {
     c64_control_ps2_character_data_write(c);
     c64_control_ps2_character_valid_write(~c64_control_ps2_character_valid_read());
-    busy_wait(1);
+    // The C64 keyboard consumes one PS/2 byte at 120 Hz. Pace foreground
+    // writes so its 16-byte input queue cannot fill; IRQ reception stays live.
+    busy_wait(9);
 }
 
 #define PS2_F0 0xF0
@@ -202,12 +215,34 @@ static void send_ps2_for_char(char c) {
 }
 
 void input_register_alt_callback(void (*callback)(char)) { alt_callback = callback; }
+void input_register_reset_callback(void (*callback)(void)) { reset_callback = callback; }
 
 static int vt_num_to_fkey(int num) {
     switch (num) {
-        case 11: return 0;  case 12: return 1;  case 13: return 2;  case 14: return 3;
-        case 15: return 4;  case 17: return 5;  case 18: return 6;  case 19: return 7;
-        case 20: return 8;  case 21: return 9;  case 23: return 10; case 24: return 11;
+        case 11:
+            return 0;
+        case 12:
+            return 1;
+        case 13:
+            return 2;
+        case 14:
+            return 3;
+        case 15:
+            return 4;
+        case 17:
+            return 5;
+        case 18:
+            return 6;
+        case 19:
+            return 7;
+        case 20:
+            return 8;
+        case 21:
+            return 9;
+        case 23:
+            return 10;
+        case 24:
+            return 11;
     }
     return -1;
 }
@@ -250,10 +285,22 @@ int c64_console(void) {
                 send_ps2_for_char(c3);
         } else if (c2 == 'O') {
             char c3 = input_block();
-            if (c3 == 'P') { send_ps2_fkey(0); return 0; }
-            if (c3 == 'Q') { send_ps2_fkey(1); return 0; }
-            if (c3 == 'R') { send_ps2_fkey(2); return 0; }
-            if (c3 == 'S') { send_ps2_fkey(3); return 0; }
+            if (c3 == 'P') {
+                send_ps2_fkey(0);
+                return 0;
+            }
+            if (c3 == 'Q') {
+                send_ps2_fkey(1);
+                return 0;
+            }
+            if (c3 == 'R') {
+                send_ps2_fkey(2);
+                return 0;
+            }
+            if (c3 == 'S') {
+                send_ps2_fkey(3);
+                return 0;
+            }
             if (c3)
                 send_ps2_for_char(c3);
         }
@@ -288,52 +335,156 @@ char input_nonblock(void) {
 }
 
 char input_block(void) {
-    while (!readchar_nonblock() && hid_ascii_pending == 0) {
+    for (;;) {
+        char c = input_nonblock();
+        if (c)
+            return c;
+        spi_hid_service(handle_spi_key);
         busy_wait(1);
     }
+}
 
-    return input_nonblock();
+// Both native USB HID and the companion use the same console translation.
+static void hid_process_press(uint8_t keycode, uint8_t modifiers) {
+    uint8_t ascii = 0;
+    uint8_t control = 0;
+
+    int8_t fkey = hid_keycode_to_fkey(keycode);
+
+    if (modifiers & HID_MOD_CTRL && ((ascii = hid_keycode_to_ascii(keycode, modifiers)))) {
+        switch (ascii) {
+            case 'c':
+                hid_ascii_pending = 0x03;
+                break;
+            case 'r':
+                hid_ascii_pending = 0x12;
+                break;
+        }
+
+    } else if (modifiers & HID_MOD_ALT && ((ascii = hid_keycode_to_ascii(keycode, modifiers)))) {
+        alt_callback_pending = ascii;
+    } else if (fkey >= 0) {
+        if (c64_control_flags_read() & OVERLAY_MASK) {
+            static const uint8_t numbers[12] = {11, 12, 13, 14, 15, 17, 18, 19, 20, 21, 23, 24};
+            hid_control_pending[0] = '\x1b';
+            hid_control_pending[1] = '[';
+            hid_control_pending[2] = '0' + numbers[fkey] / 10;
+            hid_control_pending[3] = '0' + numbers[fkey] % 10;
+            hid_control_pending[4] = '~';
+            hid_control_pending[5] = '\0';
+            hid_control_state = 0;
+        } else {
+            hid_fkey_pending = fkey;
+        }
+    } else if ((ascii = hid_keycode_to_ascii(keycode, modifiers))) {
+        hid_ascii_pending = ascii;
+    } else if ((control = hid_keycode_to_control(keycode))) {
+        hid_control_pending[0] = '\x1b';
+        hid_control_pending[1] = '[';
+        hid_control_pending[2] = control;
+        hid_control_pending[3] = '\0';
+        hid_control_state = 0;
+    }
+}
+
+static void sync_spi_modifiers(void) {
+    static const uint16_t scans[8] = {0x14, 0x12, 0x11, 0x11f, 0x114, 0x59, 0x111, 0x127};
+
+    for (uint8_t i = 0; i < 8; i++) {
+        uint8_t bit = 1u << i;
+
+        // Modifier usages E0..E7 share the last byte of the forwarded bitmap.
+        if ((spi_modifiers & bit) && !(spi_forwarded[28] & bit)) {
+            if (scans[i] & 0x100)
+                write_ps2(PS2_E0);
+
+            write_ps2((char)scans[i]);
+            spi_forwarded[28] |= bit;
+        }
+    }
+}
+
+static void handle_spi_key(uint8_t event, uint8_t usage, const uint8_t *ps2, uint8_t length) {
+    int pressed = !(event & 0x80);
+    int modifier = usage < 8 && (event & 0x7f) == 0x68 + usage;
+
+    if (modifier) {
+        if (pressed)
+            spi_modifiers |= 1u << usage;
+        else
+            spi_modifiers &= ~(1u << usage);
+        usage += 0xe0;
+    }
+
+    // Handle these globally and consume both their make and break packets.
+    // Their synthetic PS/2 Shift/Ctrl bytes must never reach the C64 decoder.
+    if (!modifier && usage == 0x46) {
+        if (pressed && !spi_print_down) {
+            uint32_t flags = c64_control_flags_read() ^ OVERLAY_MASK;
+            c64_control_flags_write(flags);
+            if (!(flags & OVERLAY_MASK))
+                sync_spi_modifiers();
+        }
+        spi_print_down = pressed;
+        return;
+    }
+
+    if (!modifier && usage == 0x48) {
+        if (pressed && !spi_pause_down && reset_callback) {
+            reset_callback();
+            memset(spi_forwarded, 0, sizeof(spi_forwarded));
+        }
+        spi_pause_down = pressed;
+        return;
+    }
+
+    uint8_t *forwarded = &spi_forwarded[usage >> 3];
+    uint8_t bit = 1u << (usage & 7);
+
+    if (!pressed) {
+        // A key pressed before opening the overlay still needs its break.
+        // Keys captured by the overlay must not leak a break after closing it.
+        if (*forwarded & bit) {
+            for (uint8_t i = 0; i < length; i++)
+                write_ps2((char)ps2[i]);
+            *forwarded &= ~bit;
+        }
+        return;
+    }
+
+    if (c64_control_flags_read() & OVERLAY_MASK) {
+        if (!modifier)
+            hid_process_press(usage, spi_modifiers);
+        return;
+    }
+
+    // Restore modifiers held across closing the overlay or resetting the C64.
+    if (!modifier)
+        sync_spi_modifiers();
+
+    for (uint8_t i = 0; i < length; i++)
+        write_ps2((char)ps2[i]);
+
+    if (length)
+        *forwarded |= bit;
 }
 
 void __attribute__((section(".sramfunc"), noinline)) input_isr(uint32_t pending) {
     if (pending & EV_HID_KEY) {
         uint8_t keycode = c64_control_hid_key_0_read();
+        hid_modifiers = c64_control_hid_key_modifiers_read();
+
         if (hid_keycode != keycode) {
-            uint8_t ascii = 0;
-            uint8_t control = 0;
-
-            hid_modifiers = c64_control_hid_key_modifiers_read();
             hid_keycode = keycode;
-
-            int8_t fkey = hid_keycode_to_fkey(keycode);
-
-            if (hid_modifiers & HID_MOD_CTRL && ((ascii = hid_keycode_to_ascii(keycode, hid_modifiers)))) {
-                switch (ascii) {
-                    case 'c':
-                        hid_ascii_pending = 0x03;
-                        break;
-                    case 'r':
-                        hid_ascii_pending = 0x12;
-                        break;
-                }
-            } else if (hid_modifiers & HID_MOD_ALT && ((ascii = hid_keycode_to_ascii(keycode, hid_modifiers))))
-                alt_callback_pending = ascii;
-            else if (fkey >= 0)
-                hid_fkey_pending = fkey;
-            else if ((ascii = hid_keycode_to_ascii(keycode, hid_modifiers)))
-                hid_ascii_pending = ascii;
-            else if ((control = hid_keycode_to_control(keycode, hid_modifiers))) {
-                hid_control_pending[0] = '\x1b';
-                hid_control_pending[1] = '[';
-                hid_control_pending[2] = control;
-                hid_control_pending[3] = '\0';
-                hid_control_state = 0;
-            }
+            hid_process_press(keycode, hid_modifiers);
         }
     }
 }
 
 void input_init(void) {
+    spi_hid_init();
+    spi_modifiers = spi_print_down = spi_pause_down = 0;
+    memset(spi_forwarded, 0, sizeof(spi_forwarded));
     hid_control_state = 0;
     hid_fkey_pending = -1;
     memset((void *)hid_control_pending, 0, sizeof(hid_control_pending));
@@ -342,16 +493,21 @@ void input_init(void) {
 }
 
 int input_service(void) {
+    spi_hid_service(handle_spi_key);
+
     if (alt_callback_pending) {
         fputc('\n', stdout);
-        alt_callback((char)alt_callback_pending);
+        if (alt_callback)
+            alt_callback((char)alt_callback_pending);
         alt_callback_pending = 0;
         return 1;
     }
+
     if (hid_fkey_pending >= 0) {
         send_ps2_fkey(hid_fkey_pending);
         hid_fkey_pending = -1;
         return 1;
     }
+
     return 0;
 }

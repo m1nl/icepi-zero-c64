@@ -68,6 +68,10 @@ class C64Control(LiteXModule):
         self.ev.tape_stop = EventSourcePulse(description="Tape stop event")
         self.ev.finalize()
 
+        # Active-high state, LSB first: UDLRABXY, Select, Start.
+        self.companion_joy_a = CSRStorage(10, reset=0, description="FPGA Companion joystick 0: UDLRABXY, Select, Start")
+        self.companion_joy_b = CSRStorage(10, reset=0, description="FPGA Companion joystick 1: UDLRABXY, Select, Start")
+
 
 class C64Top(Module):
     def __init__(
@@ -84,13 +88,18 @@ class C64Top(Module):
         usb_0,
         usb_1,
         iec,
-        debug,
+        debug=None,
         sdram_bank=0b11,
         sys_clk_freq=31527777,
         clk_domain="sys",
         tmds_clk_freq=27588750,
         tmds_clk_domain="hdmi",
         usb_clk_domain="usb",
+        led_g=None,
+        led_y=None,
+        led_r=None,
+        joya=None,
+        joyb=None,
     ):
         self.tap_sink = tap_sink = stream.Endpoint([("data", 8)])
         self.ps2_sink = ps2_sink = stream.Endpoint([("data", 8)])
@@ -229,6 +238,11 @@ class C64Top(Module):
             i_reu_mem_rdata_valid=reu_ram_port.rdata_valid,
             # LEDs
             o_leds=leds,
+            o_led_g=led_g if led_g is not None else Signal(),
+            o_led_y=led_y if led_y is not None else Signal(),
+            o_led_r=led_r if led_r is not None else Signal(),
+            i_joya=joya if joya is not None else Constant(0x3f, 6),
+            i_joyb=joyb if joyb is not None else Constant(0x3f, 6),
             # TMDS
             i_tmds_clk=ClockSignal(tmds_clk_domain),
             i_tmds_rst=ResetSignal(tmds_clk_domain),
@@ -248,6 +262,8 @@ class C64Top(Module):
             io_usb_dn_1=usb_1.d_n if usb_1 else Signal(),
             # Flags
             i_flags=self.control.flags.storage,
+            i_companion_joy_a=self.control.companion_joy_a.storage,
+            i_companion_joy_b=self.control.companion_joy_b.storage,
             # IEC serial bus
             o_iec_data_out=iec_data_out,
             o_iec_clk_out=iec_clk_out,
@@ -256,7 +272,7 @@ class C64Top(Module):
             i_iec_clk_in=iec_clk_in,
             i_iec_atn_in=iec_atn_in,
             # Debug interface (9-pin)
-            io_debug=debug,
+            io_debug=debug if debug is not None else Signal(9),
             # 1541 drive ROM
             o_drive_rom_en=None,
             o_drive_rom_addr=(drive_rom.adr if drive_rom else None),

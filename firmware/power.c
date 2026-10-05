@@ -17,37 +17,38 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // ---------------------------------------------------------------------------
 
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 
-#include <libbase/i2c.h>
+#include <generated/csr.h>
 
 #include "power.h"
 
-#define INA219_ADDR             0x43
+#ifdef CSR_I2C_BASE
+#include <libbase/i2c.h>
 
-#define INA219_REG_CONFIG       0x00
+#define INA219_ADDR 0x43
+
+#define INA219_REG_CONFIG 0x00
 #define INA219_REG_SHUNTVOLTAGE 0x01
-#define INA219_REG_BUSVOLTAGE   0x02
-#define INA219_REG_POWER        0x03
-#define INA219_REG_CURRENT      0x04
-#define INA219_REG_CALIBRATION  0x05
+#define INA219_REG_BUSVOLTAGE 0x02
+#define INA219_REG_POWER 0x03
+#define INA219_REG_CURRENT 0x04
+#define INA219_REG_CALIBRATION 0x05
 
-#define INA219_CAL_VALUE        26868
-#define INA219_CURRENT_LSB_PA   152400
-#define INA219_POWER_LSB_UW     3048
-#define INA219_CONFIG_VALUE     0xEEF
+#define INA219_CAL_VALUE 26868
+#define INA219_CURRENT_LSB_PA 152400
+#define INA219_POWER_LSB_UW 3048
+#define INA219_CONFIG_VALUE 0xEEF
 
-static int ina219_write_reg(uint8_t reg, uint16_t value)
-{
+static int ina219_write_reg(uint8_t reg, uint16_t value) {
     uint8_t buf[2];
     buf[0] = (value >> 8) & 0xFF;
     buf[1] = value & 0xFF;
     return i2c_write(INA219_ADDR, reg, buf, 2, 1);
 }
 
-static int ina219_read_reg(uint8_t reg, uint16_t *value)
-{
+static int ina219_read_reg(uint8_t reg, uint16_t *value) {
     uint8_t buf[2];
     if (!i2c_read(INA219_ADDR, reg, buf, 2, true, 1))
         return 0;
@@ -55,8 +56,7 @@ static int ina219_read_reg(uint8_t reg, uint16_t *value)
     return 1;
 }
 
-static int ina219_init(void)
-{
+static int ina219_init(void) {
     if (!ina219_write_reg(INA219_REG_CALIBRATION, INA219_CAL_VALUE))
         return 0;
     if (!ina219_write_reg(INA219_REG_CONFIG, INA219_CONFIG_VALUE))
@@ -64,8 +64,7 @@ static int ina219_init(void)
     return 1;
 }
 
-int power_report(void)
-{
+int power_report(void) {
     uint16_t raw;
     int64_t sraw;
     int bus_mv, shunt_uv, current_ma, power_mw;
@@ -124,3 +123,9 @@ int power_report(void)
 
     return 0;
 }
+#else
+int power_report(void) {
+    printf("power: I2C is disabled in this gateware\n");
+    return -1;
+}
+#endif

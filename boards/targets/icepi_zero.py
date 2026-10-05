@@ -11,7 +11,7 @@
 from litex.build.io import DDROutput
 from litex.build.yosys_wrapper import YosysWrapper
 from litex.gen import *
-from litex.soc.cores.bitbang import I2CMaster
+# from litex.soc.cores.bitbang import I2CMaster
 from litex.soc.cores.clock import *
 from litex.soc.cores.dma import *
 from litex.soc.integration.builder import *
@@ -22,6 +22,7 @@ from migen import *
 
 from boards.platforms import icepi_zero
 from gateware.c64_top import C64Top
+from gateware.spi_report import SPIReport
 from gateware.tiny_sdram import TinySDRAM, TinySDRAMWishboneAdapter
 from gateware.video_terminal_overlay import VideoTerminalOverlay
 
@@ -84,7 +85,8 @@ class _CRG(LiteXModule):
 class BaseSoC(SoCCore):
     mem_map = {
         **SoCCore.mem_map,
-        **{"spiflash": 0x20000000, "drive_shmem": 0x50000000, "drive_rom": 0x60000000},
+        **{"spiflash": 0x20000000, "spi_report": 0xb0000000,
+           "drive_shmem": 0x50000000, "drive_rom": 0x60000000},
     }
 
     def __init__(
@@ -96,6 +98,8 @@ class BaseSoC(SoCCore):
         sdram_rate="1:1",
         l2_size=0,
         with_spi_flash=True,
+        with_external_leds=False,
+        with_joysticks=False,
         **kwargs,
     ):
         if toolchain != "trellis":
@@ -158,9 +162,19 @@ class BaseSoC(SoCCore):
             )
             self.cpu.set_reset_address(self.bus.regions["rom"].origin)
 
-        # System I2C (behing multiplexer) ----------------------------------------------------------
-        i2c_pads = platform.request("i2c")
-        self.i2c = I2CMaster(i2c_pads)
+        # System I2C (behind multiplexer; disabled for now) -----------------------------------------
+        # i2c_pads = platform.request("i2c")
+        # self.i2c = I2CMaster(i2c_pads)
+
+        # Receive-only SPI report buffer -----------------------------------------------------------
+        self.spi_report = SPIReport(platform, platform.request("spi_report"))
+        self.bus.add_slave(
+            name="spi_report", slave=self.spi_report.bus,
+            region=SoCRegion(origin=self.mem_map["spi_report"], size=16,
+                             mode="r", cached=False),
+        )
+        if self.irq.enabled:
+            self.irq.add("spi_report", use_loc_if_exists=True)
 
         # TMDS -------------------------------------------------------------------------------------
         tmds = platform.request("gpdi")
@@ -247,7 +261,13 @@ class BaseSoC(SoCCore):
             usb_0=platform.request("usb", 1),  # swap USB inputs
             usb_1=platform.request("usb", 0),
             iec=platform.request("iec", 0),
-            debug=platform.request("debug", 0),
+            # The legacy debug header overlaps these expansion-board pins.
+            debug=platform.request("debug", 0) if not (with_external_leds or with_joysticks) else None,
+            led_g=platform.request("led_g") if with_external_leds else None,
+            led_y=platform.request("led_y") if with_external_leds else None,
+            led_r=platform.request("led_r") if with_external_leds else None,
+            joya=platform.request("joya") if with_joysticks else None,
+            joyb=platform.request("joyb") if with_joysticks else None,
             sys_clk_freq=sys_clk_freq,
             clk_domain="sys",
             tmds_clk_freq=tmds_clk_freq,
@@ -297,6 +317,8 @@ def main():
     parser.add_target_argument("--device", default="LFE5U-25F", help="FPGA device (LFE5U-25F).")
     parser.add_target_argument("--sdram-rate", default="1:3", help="SDRAM Rate (1:1 or 1:3).")
     parser.add_target_argument("--with-spi-flash", action="store_true", help="Enable memory-mapped SPI flash.")
+    parser.add_target_argument("--with-external-leds", action="store_true", help="Enable expansion-board green/yellow/red LEDs.")
+    parser.add_target_argument("--with-joysticks", action="store_true", help="Enable both expansion-board joystick ports with pull-ups.")
     parser.add_target_argument("--sys-clk-freq", default=SYS_CLK_FREQUENCY, type=float, help="System clock frequency.")
 
     parser.set_defaults(
@@ -321,6 +343,8 @@ def main():
         sys_clk_freq=args.sys_clk_freq,
         sdram_rate=args.sdram_rate,
         with_spi_flash=args.with_spi_flash,
+        with_external_leds=args.with_external_leds,
+        with_joysticks=args.with_joysticks,
         **parser.soc_argdict,
     )
 

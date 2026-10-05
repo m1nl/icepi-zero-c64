@@ -41,6 +41,7 @@
 #include "embedded_cli.h"
 #include "input.h"
 #include "power.h"
+#include "spi_hid.h"
 
 #include "main.h"
 
@@ -743,6 +744,8 @@ void isr_handler(void);
 void __attribute__((section(".sramfunc"), noinline)) isr_handler(void) {
     unsigned int irqs = irq_pending() & irq_getmask();
 
+    if (irqs & (1u << SPI_REPORT_INTERRUPT))
+        spi_hid_isr();
     if (irqs & (1 << UART_INTERRUPT))
         uart_isr();
     if (irqs & (1 << C64_CONTROL_INTERRUPT))
@@ -759,12 +762,13 @@ int main(void) {
 
     heap_init();
     input_init();
+    input_register_reset_callback(c64_reset_cpu);
 
     c64_init();
     c64_disk_init();
     c64_tape_init();
 
-    irq_setmask(irq_getmask() | (1 << C64_CONTROL_INTERRUPT));
+    irq_setmask(irq_getmask() | (1 << C64_CONTROL_INTERRUPT) | (1u << SPI_REPORT_INTERRUPT));
 
     help_cmd();
     busy_wait(2000);

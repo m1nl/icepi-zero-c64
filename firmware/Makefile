@@ -4,8 +4,10 @@ include $(SOC_DIRECTORY)/software/common.mak
 LIBS := $(filter-out liblitesdcard libfatfs,$(LIBS))
 PACKAGES := $(filter-out liblitesdcard libfatfs,$(PACKAGES))
 
-OBJECTS = crt0.o main.o embedded_cli.o heap.o tlsf.o spisdcard.o ff.o ffunicode.o ffsystem.o input.o c64_disk.o c64_tape.o c64_cart.o power.o strstr.o
+OBJECTS = crt0.o main.o embedded_cli.o heap.o tlsf.o spisdcard.o ff.o ffunicode.o ffsystem.o input.o spi_hid.o c64_disk.o c64_tape.o c64_cart.o power.o strstr.o
 CFLAGS += -Os -flto
+SPI_HID_DEBUG ?= 0
+CFLAGS += -DSPI_HID_DEBUG=$(SPI_HID_DEBUG)
 
 all: icepi-zero-c64.bin
 
@@ -17,7 +19,7 @@ endif
 
 vpath %.a $(PACKAGES:%=../%)
 
-icepi-zero-c64.elf: $(OBJECTS)
+icepi-zero-c64.elf: $(OBJECTS) linker.ld
 	$(CC) $(LDFLAGS) -T linker.ld -N -o $@ \
 		$(OBJECTS) \
 		$(PACKAGES:%=-L$(BUILD_DIR)/software/%) \

@@ -25,6 +25,15 @@ _io_common = [
     ("user_led", 2, Pins("E12"), IOStandard("LVCMOS33")),
     ("user_led", 3, Pins("C13"), IOStandard("LVCMOS33")),
     ("user_led", 4, Pins("D13"), IOStandard("LVCMOS33")),
+    # Optional expansion-board LEDs (GPIO13, GPIO14, GPIO15).
+    ("led_g", 0, Pins("E3"), IOStandard("LVCMOS33"), Misc("PULLMODE=DOWN")),
+    ("led_y", 0, Pins("P1"), IOStandard("LVCMOS33"), Misc("PULLMODE=DOWN")),
+    ("led_r", 0, Pins("N1"), IOStandard("LVCMOS33"), Misc("PULLMODE=DOWN")),
+    # Optional WS2812 data output (GPIO12); keep the line low when undriven.
+    ("ws2812", 0, Pins("J3"), IOStandard("LVCMOS33"), Misc("PULLMODE=DOWN")),
+    # Optional active-low joystick inputs: up, down, left, right, fire, fire2.
+    ("joya", 0, Pins("T2 K3 R1 R2 G3 E1"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),
+    ("joyb", 0, Pins("H2 G1 L2 J1 F3 G2"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),
     # Serial
     (
         "serial",
@@ -49,15 +58,27 @@ _io_common = [
         IOStandard("LVCMOS33"),
         Misc("SLEWRATE=FAST"),
     ),
-    # Spare GPIOs
+    # Alternate spare GPIO resource; shares pins with optional LEDs/joysticks.
     (
         "gpio",
         0,
-        #      1  4  7  8 12 14 15 17 18 22 23 24 25 27
-        Pins("K3 R1 G1 H2 J3 P1 N1 R3 N4 P2 M2 L1 J2 P3"),
+        #      1  4  7  8 14 15 16 20
+        Pins("K3 R1 G1 H2 P1 N1 H3 F1"),
         IOStandard("LVCMOS33"),
     ),
-    # Debug integrface (9-pin)
+    # MCU SPI: GPIO18 CS, GPIO24 SCK, GPIO25 MOSI, GPIO21 MISO, GPIO22 IRQN.
+    # MISO and IRQN are reserved interface signals, unused by the receiver.
+    (
+        "spi_report",
+        0,
+        Subsignal("cs_n", Pins("N4"), Misc("PULLMODE=UP")),
+        Subsignal("clk", Pins("L1"), Misc("PULLMODE=UP")),
+        Subsignal("mosi", Pins("J2"), Misc("PULLMODE=UP")),
+        Subsignal("miso", Pins("F2"), Misc("PULLMODE=UP")),
+        Subsignal("irq_n", Pins("P2"), Misc("PULLMODE=UP")),
+        IOStandard("LVCMOS33"),
+    ),
+    # Alternate debug interface (shares pins with optional LEDs/joysticks).
     (
         "debug",
         0,
@@ -65,20 +86,21 @@ _io_common = [
         Pins("L2 J1 G2 G3 E1 F3 E3 E4 D4"),
         IOStandard("LVCMOS33"),
     ),
-    # I2C - GPIO2, GPIO3
-    (
-        "i2c",
-        0,
-        Subsignal("scl", Pins("R2"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),  # GPIO2
-        Subsignal("sda", Pins("T2"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),  # GPIO3
-    ),
-    # IEC serial bus (open-drain; pulled up externally or via PULLMODE=UP) - GPIO21 (40), GPIO20 (38), GPIO16 (36)
+    # I2C - GPIO2, GPIO3 (disabled for now)
+    # (
+    #     "i2c",
+    #     0,
+    #     Subsignal("scl", Pins("R2"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),  # GPIO2
+    #     Subsignal("sda", Pins("T2"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),  # GPIO3
+    # ),
+    # IEC serial bus (open-drain; pulled up externally or via PULLMODE=UP).
+    # DATA: GPIO17 (11), CLK: GPIO27 (13), ATN: GPIO23 (16).
     (
         "iec",
         0,
-        Subsignal("data", Pins("F2"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),
-        Subsignal("clk", Pins("F1"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),
-        Subsignal("atn", Pins("H3"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),
+        Subsignal("data", Pins("R3"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),
+        Subsignal("clk", Pins("P3"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),
+        Subsignal("atn", Pins("M2"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),
     ),
     # USB
     (
