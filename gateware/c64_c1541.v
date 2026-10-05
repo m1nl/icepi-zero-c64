@@ -68,6 +68,7 @@ module c64_c1541 #(
 
 wire clk_f;
 wire clk_r;
+wire clk_phi;
 
 // approximate 16MHz from C64 PAL or NTSC frequency
 
@@ -82,9 +83,9 @@ reg [3:0]               clock_phase = 0;
 
 assign gcr_ce = (gcr_ce_cnt >= FREQUENCY_NORMALIZED[GCR_CNT_WIDTH-1:0]) && !stall;
 
-assign clk_r   = (clock_phase == 4'd0) && gcr_ce;
-assign clk_f   = (clock_phase == 4'd8) && gcr_ce;
-assign clk_phi = (clock_phase >= 4'd0 && clock_phase < 4'd8);
+assign clk_r   = (clock_phase == 4'd00) && gcr_ce;
+assign clk_f   = (clock_phase == 4'd08) && gcr_ce;
+assign clk_phi = (clock_phase >= 4'd00 && clock_phase < 4'd8);
 
 always @(posedge clk) begin
   if (reset) begin

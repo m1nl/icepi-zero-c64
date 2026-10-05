@@ -5,7 +5,7 @@ from cocotb.triggers import ClockCycles, RisingEdge
 
 @cocotb.test()
 async def test_c1541_gcr_basic(dut):
-    clock = Clock(dut.clk, 31.25, unit="ns")
+    clock = Clock(dut.clk, 62.5, unit="ns")
     cocotb.start_soon(clock.start())
 
     dut.reset.value = 1

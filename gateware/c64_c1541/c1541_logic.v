@@ -11,7 +11,7 @@
 `timescale 1 ns / 1 ps
 module c1541_logic #(
   parameter CPU_MODEL = 1,
-  parameter VIA_MODEL = 0
+  parameter VIA_MODEL = 1
 ) (
   input wire clk,
   input wire reset,
@@ -224,6 +224,7 @@ generate
       .ddrb(uc1_pb_oe),
 
       .ca1_in(~iec_atn_in),
+
       .ca2_in(uc1_ca2_o | ~uc1_ca2_oe),
       .ca2_out(uc1_ca2_o),
 
@@ -322,6 +323,7 @@ generate
       .ddrb(uc3_pb_oe),
 
       .ca1_in(cpu_so_n),
+
       .ca2_in(uc3_ca2_o | ~uc3_ca2_oe),
       .ca2_out(uc3_ca2_o),
 
