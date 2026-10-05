@@ -47,7 +47,7 @@ module c64_cartridge (
   output wire nmi,
   output wire irq,
 
-  output wire io2_we_valid,
+  output reg io2_we_valid,
 
   output wire [20:0] rom_addr,
   output reg         rom_enable,
