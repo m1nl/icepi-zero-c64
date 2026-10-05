@@ -247,6 +247,7 @@ class BaseSoC(SoCCore):
             usb_0=platform.request("usb", 1),  # swap USB inputs
             usb_1=platform.request("usb", 0),
             iec=platform.request("iec", 0),
+            debug=platform.request("debug", 0),
             sys_clk_freq=sys_clk_freq,
             clk_domain="sys",
             tmds_clk_freq=tmds_clk_freq,

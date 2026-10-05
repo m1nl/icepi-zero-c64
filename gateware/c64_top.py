@@ -84,6 +84,7 @@ class C64Top(Module):
         usb_0,
         usb_1,
         iec,
+        debug,
         sdram_bank=0b11,
         sys_clk_freq=31527777,
         clk_domain="sys",
@@ -235,16 +236,16 @@ class C64Top(Module):
             o_tmds_1=tmds_1,
             o_tmds_2=tmds_2,
             # USB
-            i_usb_clk=ClockSignal(usb_clk_domain),
-            i_usb_rst=ResetSignal(usb_clk_domain),
-            o_usb_pullup_dp_0=usb_0.pullup[0],
-            o_usb_pullup_dn_0=usb_0.pullup[1],
-            o_usb_pullup_dp_1=usb_1.pullup[0],
-            o_usb_pullup_dn_1=usb_1.pullup[1],
-            io_usb_dp_0=usb_0.d_p,
-            io_usb_dn_0=usb_0.d_n,
-            io_usb_dp_1=usb_1.d_p,
-            io_usb_dn_1=usb_1.d_n,
+            i_usb_clk=ClockSignal(usb_clk_domain) if usb_clk_domain else Signal(),
+            i_usb_rst=ResetSignal(usb_clk_domain) if usb_clk_domain else Signal(),
+            o_usb_pullup_dp_0=usb_0.pullup[0] if usb_0 else Signal(),
+            o_usb_pullup_dn_0=usb_0.pullup[1] if usb_0 else Signal(),
+            o_usb_pullup_dp_1=usb_1.pullup[0] if usb_1 else Signal(),
+            o_usb_pullup_dn_1=usb_1.pullup[1] if usb_1 else Signal(),
+            io_usb_dp_0=usb_0.d_p if usb_0 else Signal(),
+            io_usb_dn_0=usb_0.d_n if usb_0 else Signal(),
+            io_usb_dp_1=usb_1.d_p if usb_1 else Signal(),
+            io_usb_dn_1=usb_1.d_n if usb_1 else Signal(),
             # Flags
             i_flags=self.control.flags.storage,
             # IEC serial bus
@@ -254,6 +255,8 @@ class C64Top(Module):
             i_iec_data_in=iec_data_in,
             i_iec_clk_in=iec_clk_in,
             i_iec_atn_in=iec_atn_in,
+            # Debug interface (9-pin)
+            io_debug=debug,
             # 1541 drive ROM
             o_drive_rom_en=None,
             o_drive_rom_addr=(drive_rom.adr if drive_rom else None),

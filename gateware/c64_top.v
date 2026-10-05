@@ -86,6 +86,9 @@ module c64_top #(
   input  wire iec_clk_in,
   input  wire iec_atn_in,
 
+  // Debug interface (9-pin)
+  inout wire  [8:0] debug,
+
   // 1541 drive ROM
   output reg         drive_rom_en,
   output reg  [12:0] drive_rom_addr,
@@ -1224,6 +1227,8 @@ always @(posedge clk) begin
 end
 
 assign leds = leds_r;
+
+assign debug = 9'bzzzzzzzzz;
 
 endmodule
 `default_nettype wire

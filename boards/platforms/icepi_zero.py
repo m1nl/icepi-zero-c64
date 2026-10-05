@@ -49,19 +49,28 @@ _io_common = [
         IOStandard("LVCMOS33"),
         Misc("SLEWRATE=FAST"),
     ),
-    # GPIOs
+    # Spare GPIOs
     (
         "gpio",
         0,
-        Pins("G3 K3 R1 E1 F3 G1 H2 J1 L2 G2 J3 E3 P1 N1 R3 N4 E4 P2 M2 L1 J2 D4 P3"),
+        #      1  4  7  8 12 14 15 17 18 22 23 24 25 27
+        Pins("K3 R1 G1 H2 J3 P1 N1 R3 N4 P2 M2 L1 J2 P3"),
+        IOStandard("LVCMOS33"),
+    ),
+    # Debug integrface (9-pin)
+    (
+        "debug",
+        0,
+        #     10  9 11  0  5  6 13 19 26
+        Pins("L2 J1 G2 G3 E1 F3 E3 E4 D4"),
         IOStandard("LVCMOS33"),
     ),
     # I2C - GPIO2, GPIO3
     (
         "i2c",
         0,
-        Subsignal("scl", Pins("R2"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),
-        Subsignal("sda", Pins("T2"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),
+        Subsignal("scl", Pins("R2"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),  # GPIO2
+        Subsignal("sda", Pins("T2"), IOStandard("LVCMOS33"), Misc("PULLMODE=UP")),  # GPIO3
     ),
     # IEC serial bus (open-drain; pulled up externally or via PULLMODE=UP) - GPIO21 (40), GPIO20 (38), GPIO16 (36)
     (
