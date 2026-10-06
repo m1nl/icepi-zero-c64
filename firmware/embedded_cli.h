@@ -111,6 +111,9 @@ struct embedded_cli {
 int embedded_cli_init(struct embedded_cli *, const char *prompt, void (*put_char)(void *data, char ch, bool is_last),
                       void *cb_data);
 
+/* Replace the prompt used by normal output and line redraws. */
+bool embedded_cli_set_prompt(struct embedded_cli *cli, const char *prompt);
+
 void embedded_cli_putchar(struct embedded_cli *cli, char ch, bool is_last);
 
 void embedded_cli_puts(struct embedded_cli *cli, const char *s);
@@ -123,6 +126,9 @@ void embedded_cli_printf(struct embedded_cli *cli, const char *fmt, ...);
  * Note: This function should not be called from an interrupt handler.
  */
 bool embedded_cli_insert_char(struct embedded_cli *cli, char ch);
+
+/* Insert literal text at the cursor. Return false if the whole text cannot fit. */
+bool embedded_cli_insert_text(struct embedded_cli *cli, const char *text);
 
 /**
  * Returns the nul terminated internal buffer. This will

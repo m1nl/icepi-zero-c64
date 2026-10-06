@@ -31,6 +31,7 @@
 
 #include "ff.h"
 #include "heap.h"
+#include "sdcard_paths.h"
 #include "spisdcard.h"
 
 #include "c64_cart.h"
@@ -38,6 +39,7 @@
 #include "c64_event.h"
 #include "c64_tape.h"
 
+#include "cli_path_completion.h"
 #include "embedded_cli.h"
 #include "input.h"
 #include "power.h"
@@ -346,6 +348,8 @@ static void help_cmd(void) {
     puts("reboot                - Reboot CPU");
     puts("sdcard_reset          - Reset SD card");
     puts("ls [path]             - List SD card directory");
+    puts("cd [path]             - Change directory (default: /)");
+    puts("pwd                   - Show current directory");
     puts("hexdump <addr> [len]  - Hex dump memory (len default 256)");
     puts("console               - Redirect serial console to C64");
     puts("mount <path> [0|1]    - Mount D64 disk image (1 for read-write)");
@@ -412,52 +416,103 @@ static void c64_resume_cmd(void) { c64_control_cpu_pause_req_write(0); }
 
 static void sdcard_reset_cmd(void) { spisdcard_init(); }
 
+static char *command_path(const char *path) {
+    char *resolved = malloc(SDCARD_PATH_MAX);
+    FRESULT result = resolved ? sdcard_resolve_path(path, resolved) : FR_NOT_ENOUGH_CORE;
+    if (result != FR_OK) {
+        printf("cannot resolve path (err %d)\n", result);
+        free(resolved);
+        return NULL;
+    }
+    return resolved;
+}
+
+static void cd_cmd(int argc, char **argv) {
+    if (argc > 1) {
+        printf("usage: cd [path]\n");
+        return;
+    }
+
+    FRESULT result = sdcard_change_directory(argc ? argv[0] : "/");
+
+    if (result != FR_OK) {
+        printf("cd: cannot change directory (err %d)\n", result);
+
+    } else {
+        if (!cli_directory_prompt_update(&cli)) {
+            printf("cd: cannot update prompt (out of memory)\n");
+        }
+    }
+}
+
 static void ls_cmd(int argc, char **argv) {
+    if (argc > 1) {
+        printf("usage: ls [path]\n");
+        return;
+    }
+
+    char *dirpath = command_path(argc ? argv[0] : ".");
+
+    if (!dirpath)
+        return;
+
     FRESULT res;
-    DIR dir;
-    FILINFO fno;
+    FILINFO *entries = NULL;
 
-    int mounted = 0;
-
+    size_t count = 0;
     res = f_mount(&fs, "", 1);
+
+    if (res == FR_OK)
+        res = sdcard_read_directory(dirpath, &entries, &count);
+
     if (res != FR_OK) {
-        printf("ls: sdcard mount failed (err %d)\n", res);
-        goto exit;
-    }
+        printf("ls: cannot list '%s' (err %d)\n", dirpath, res);
 
-    mounted = 1;
+    } else {
+        printf("Contents of %s:\n", dirpath);
 
-    const char *dirpath = (argc == 0) ? "/" : argv[0];
-    res = f_opendir(&dir, dirpath);
-    if (res != FR_OK) {
-        printf("ls: cannot open '%s' (err %d)\n", dirpath, res);
-        goto exit;
-    }
+        for (size_t i = 0; i < count; i++) {
+            FILINFO *info = &entries[i];
 
-    printf("Contents of %s:\n", dirpath);
-    for (int i = 1;; i++) {
-        res = f_readdir(&dir, &fno);
-        if (res != FR_OK || fno.fname[0] == '\0')
-            break;
-        if (fno.fattrib & AM_DIR)
-            printf("     [DIR]  %s\n", fno.fname);
-        else
-            printf("  %8lu  %s\n", (unsigned long)fno.fsize, fno.fname);
+            if (info->fattrib & AM_DIR) {
+                printf("  %11s  %s\n", "[DIR]", info->fname);
+            } else {
+                static const char *const units[] = {"B", "KiB", "MiB", "GiB"};
+                uint64_t bytes = info->fsize;
+                uint64_t divisor = 1;
+                unsigned int unit = 0;
 
-        if (i % 20 == 0) {
-            printf("\e[92;1mpress esc to break, any other key to continue\e[0m\n");
+                while (unit < 3 && bytes / divisor >= 1024) {
+                    divisor *= 1024;
+                    unit++;
+                }
 
-            if (input_block() == 0x1b)
-                break;
+                if (!unit) {
+                    printf("  %9lu B  %s\n", (unsigned long)bytes, info->fname);
+
+                } else {
+                    unsigned long tenths = (bytes * 10 + divisor / 2) / divisor;
+                    // Promote values that round up to the next unit.
+                    if (tenths == 10240 && unit < 3) {
+                        divisor *= 1024;
+                        unit++;
+                        tenths = (bytes * 10 + divisor / 2) / divisor;
+                    }
+                    printf("  %5lu.%lu %s  %s\n", tenths / 10, tenths % 10, units[unit], info->fname);
+                }
+            }
+
+            if ((i + 1) % 20 == 0 && i + 1 < count) {
+                printf("\e[92;1mpress esc to break, any other key to continue\e[0m\n");
+                if (input_block() == 0x1b)
+                    break;
+            }
         }
     }
 
-    f_closedir(&dir);
-
-exit:
-    if (mounted) {
-        f_unmount("");
-    }
+    free(entries);
+    free(dirpath);
+    f_unmount("");
 }
 
 static void hexdump_cmd(int argc, char **argv) {
@@ -496,12 +551,15 @@ static void c64_disk_mount_cmd(int argc, char **argv) {
         return;
     }
 
-    const char *path = argv[0];
+    char *path = command_path(argv[0]);
+    if (!path)
+        return;
     int rw = 0;
     if (argc == 2)
         rw = argv[1][0] == '1';
 
     c64_disk_mount(path, rw);
+    free(path);
 }
 
 static void c64_disk_format_cmd(int argc, char **argv) {
@@ -510,10 +568,13 @@ static void c64_disk_format_cmd(int argc, char **argv) {
         return;
     }
 
-    const char *path = argv[0];
+    char *path = command_path(argv[0]);
+    if (!path)
+        return;
     const char *label = argv[1];
 
     c64_disk_format(path, label);
+    free(path);
 }
 
 static void c64_tape_load_cmd(int argc, char **argv) {
@@ -522,8 +583,11 @@ static void c64_tape_load_cmd(int argc, char **argv) {
         return;
     }
 
-    const char *path = argv[0];
+    char *path = command_path(argv[0]);
+    if (!path)
+        return;
     c64_tape_load(path);
+    free(path);
 }
 
 static void c64_cart_load_cmd(int argc, char **argv) {
@@ -532,7 +596,9 @@ static void c64_cart_load_cmd(int argc, char **argv) {
         return;
     }
 
-    const char *path = argv[0];
+    char *path = command_path(argv[0]);
+    if (!path)
+        return;
 
     uint32_t flags = c64_control_flags_read();
     flags &= ~(1 << FLAG_CART_PRESENT);
@@ -544,6 +610,7 @@ static void c64_cart_load_cmd(int argc, char **argv) {
         c64_control_flags_write(flags);
     }
 
+    free(path);
     c64_reset_cpu();
 }
 
@@ -576,8 +643,13 @@ static int get_command_code(const char *cmd) {
 static int console_service(void) {
     char c = input_nonblock();
 
-    if (!c || c == '\t')
+    if (!c)
         return 0;
+
+    if (c == '\t') {
+        cli_path_complete(&cli);
+        return 0;
+    }
 
     if (!embedded_cli_insert_char(&cli, c))
         return 0;
@@ -610,6 +682,15 @@ static int console_service(void) {
             break;
         case COMMAND_LS:
             ls_cmd(argc, argv);
+            break;
+        case COMMAND_CD:
+            cd_cmd(argc, argv);
+            break;
+        case COMMAND_PWD:
+            if (argc)
+                puts("usage: pwd");
+            else
+                puts(sdcard_current_directory());
             break;
         case COMMAND_HEXDUMP:
             hexdump_cmd(argc, argv);
@@ -776,7 +857,7 @@ int main(void) {
 
     input_register_alt_callback(alt_callback);
 
-    embedded_cli_init(&cli, "\e[92;1micepi-c64\e[0m> ", posix_putch, stdout);
+    embedded_cli_init(&cli, "\e[92;1m/\e[0m> ", posix_putch, stdout);
 
     int show_prompt = 1;
 

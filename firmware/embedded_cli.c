@@ -34,20 +34,29 @@ int embedded_cli_init(struct embedded_cli *cli, const char *prompt,
     cli->history = malloc(EMBEDDED_CLI_HISTORY_LEN);
     if (!cli->history)
         return -1;
+    memset(cli->history, 0, EMBEDDED_CLI_HISTORY_LEN);
     cli->buffer = malloc(EMBEDDED_CLI_MAX_LINE);
     if (!cli->buffer)
         return -1;
+    cli->buffer[0] = '\0';
     cli->put_char = put_char;
     cli->cb_data = cb_data;
 
-    size_t prompt_len = strlen(prompt);
-    cli->prompt = malloc(prompt_len + 1);
-    if (!cli->prompt)
+    if (!embedded_cli_set_prompt(cli, prompt))
         return -1;
-    memcpy(cli->prompt, prompt, prompt_len);
-    cli->prompt[prompt_len] = '\0';
     embedded_cli_reset_line(cli);
     return 0;
+}
+
+bool embedded_cli_set_prompt(struct embedded_cli *cli, const char *prompt) {
+    size_t size = strlen(prompt) + 1;
+    char *replacement = malloc(size);
+    if (!replacement)
+        return false;
+    memcpy(replacement, prompt, size);
+    free(cli->prompt);
+    cli->prompt = replacement;
+    return true;
 }
 
 void embedded_cli_putchar(struct embedded_cli *cli, char ch, bool is_last) {
@@ -146,6 +155,20 @@ static void embedded_cli_insert_default_char(struct embedded_cli *cli, char ch) 
     }
 }
 
+bool embedded_cli_insert_text(struct embedded_cli *cli, const char *text) {
+    int len = strlen(text);
+    if (cli->done || cli->len + len >= EMBEDDED_CLI_MAX_LINE)
+        return false;
+    memmove(cli->buffer + cli->cursor + len, cli->buffer + cli->cursor,
+            cli->len - cli->cursor + 1);
+    memcpy(cli->buffer + cli->cursor, text, len);
+    embedded_cli_puts(cli, cli->buffer + cli->cursor);
+    cli->cursor += len;
+    cli->len += len;
+    term_cursor_back(cli, cli->len - cli->cursor);
+    return true;
+}
+
 const char *embedded_cli_get_history(struct embedded_cli *cli, int history_pos) {
 #if EMBEDDED_CLI_HISTORY_LEN
     int pos = 0;
@@ -174,12 +197,12 @@ const char *embedded_cli_get_history(struct embedded_cli *cli, int history_pos) 
 #if EMBEDDED_CLI_HISTORY_LEN
 static void embedded_cli_extend_history(struct embedded_cli *cli) {
     size_t len = strlen(cli->buffer);
-    if (len > 0) {
+    if (len > 0 && len < EMBEDDED_CLI_HISTORY_LEN) {
         // If the new entry is the same as the most recent history entry,
         // then don't insert it
         if (strcmp(cli->buffer, cli->history) == 0)
             return;
-        memmove(&cli->history[len + 1], &cli->history[0], EMBEDDED_CLI_HISTORY_LEN - len + 1);
+        memmove(&cli->history[len + 1], &cli->history[0], EMBEDDED_CLI_HISTORY_LEN - len - 1);
         memcpy(cli->history, cli->buffer, len + 1);
         // Make sure it's always nul terminated
         cli->history[EMBEDDED_CLI_HISTORY_LEN - 1] = '\0';
