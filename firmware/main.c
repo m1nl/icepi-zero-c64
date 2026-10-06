@@ -361,7 +361,7 @@ static void help_cmd(void) {
     puts("cart_load <path>      - Load CRT file (triggers reset)");
     puts("cart_eject            - Eject CRT file (triggers reset)");
     puts("flags                 - Show current flags");
-    puts("flag <name> [0|1]     - Set or toggle a flag bit (auto-saved)");
+    puts("flag <name|number> [0|1|enable|disable|toggle] - Change a flag (auto-saved)");
     puts("init                  - Re-initialize C64 (required for certain flags)");
     puts("reset                 - Reset C64 CPU");
     puts("pause                 - Pause C64 CPU");
@@ -390,15 +390,31 @@ static void flags_cmd(void) {
 
 static void flag_cmd(int argc, char **argv) {
     if (argc != 1 && argc != 2) {
-        printf("usage: flag <name> [0|1]\n");
+        printf("usage: flag <name|number> [0|1|enable|disable|toggle]\n");
         return;
     }
     const char *name = argv[0];
     int val = -1;
-    if (argc == 2)
-        val = (int)strtoul(argv[1], NULL, 0);
+    if (argc == 2) {
+        if (strcmp(argv[1], "1") == 0 || strcmp(argv[1], "enable") == 0 || strcmp(argv[1], "on") == 0)
+            val = 1;
+        else if (strcmp(argv[1], "0") == 0 || strcmp(argv[1], "disable") == 0 || strcmp(argv[1], "off") == 0)
+            val = 0;
+        else if (strcmp(argv[1], "toggle") != 0) {
+            printf("flag: invalid action: %s\n", argv[1]);
+            return;
+        }
+    }
+    int number = 0;
+    const char *digit = name;
+    while (*digit >= '0' && *digit <= '9') {
+        number = number * 10 + *digit++ - '0';
+        if (number > 31)
+            break;
+    }
+    int numeric = digit != name && !*digit && number <= 31;
     for (int i = 0; i < FLAG_DEFS_COUNT; i++) {
-        if (strcmp(flag_defs[i].name, name) == 0) {
+        if (strcmp(flag_defs[i].name, name) == 0 || (numeric && flag_defs[i].bit == number)) {
             c64_flag(flag_defs[i].bit, val);
             return;
         }

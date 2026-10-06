@@ -189,7 +189,7 @@ The LiteX/VexRiscv SoC exposes a serial console. The `help` command lists every 
 | `cart_load <path>`        | Load CRT file (triggers reset).                                             |
 | `cart_eject`              | Eject CRT file (triggers reset).                                            |
 | `flags`                   | Show every runtime flag, its bit number, current value and description.     |
-| `flag <name> [0\|1]`      | Set (`1`), clear (`0`), or toggle (no argument) a flag; state is persisted. |
+| `flag <name or number> [action]` | Enable, disable, or toggle a flag by name or decimal bit number; state is persisted. |
 | `init`                    | Re-initialise the C64: reload saved flags, the default cartridge and 1541 ROM, then reset the CPU. |
 | `reset`                   | Reset the emulated C64 CPU (clears RAM to the cartridge-dependent pattern). |
 | `pause`                   | Halt the C64 CPU clock.                                                     |
@@ -202,25 +202,34 @@ Flag values are auto-saved to a JSON file on the SD card, so any toggle (through
 
 ### Runtime flags
 
-The `flag <name> [0|1]` command (and the persisted JSON file) operate on the following configuration bits, defined in `firmware/main.h`:
+Use `flag <name or number> [action]` to change a flag by its name or decimal bit number. Actions are `1`, `enable`, or `on` to enable; `0`, `disable`, or `off` to disable; and `toggle` to toggle. Omitting the action also toggles. Unknown flags and invalid actions leave the state unchanged.
 
-| Flag                    | Purpose                                                                                                       |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `cia_model`             | Selects the CIA variant used for both CIA1 and CIA2 (`0` = 6526, `1` = 8521).                                 |
-| `sid_model`             | Selects the SID variant (`0` = 6581, `1` = 8580) — changes filter characteristics and the "dead" waveform.    |
-| `sid_dual`              | Enables dual-SID output: the second SID is mapped at `$D420` for stereo music playback.                       |
-| `sid_pan`               | Applies panning correction when dual-SID is active (fixes very wide stereo image with dual-SID playback).     |
-| `sid_auto_mono`         | When the second SID is idle, output is automatically summed to mono — avoids silent channel on mono software. |
-| `va_delay`              | Emulates the VA14/VA15 glitch delay of the original `U14` 74LS257 — required by some demos/effects.           |
-| `overlay`               | Enables the on-screen terminal overlay (toggled by `Print Screen` or the overlay interrupt).                  |
-| `joy_invert`            | Swaps joystick ports 1 and 2 (useful when a game expects the opposite port to the one you plugged into).      |
-| `joy_button_space`      | Maps the gamepad's second fire button to the `Space` key (useful for games using Space as a secondary fire).  |
-| `joy_emulation_0`       | Allows using the host keyboard as joystick port 1 (cursor keys + `F`/`Space` for fire).                       |
-| `joy_emulation_1`       | Same as above, but for joystick port 2.                                                                       |
-| `cart_present`          | Indicates that cartridge is present; cleared upon reboot when `/c64_roms/default.crt` is not present          |
-| `reu_present`           | Indicates that 4MiB REU is present; changes to this flag require `reset` to take effect.                      |
-| `c1541_rom_ext`         | Extended C1541 ROM (DolphinDOS)                                                                               |
-| `iec_master_disconnect` | Disconnects the C64 from the virtual IEC bus.                                                                 |
+```text
+flag sid_dual enable
+flag 2 disable
+flag 2 toggle
+flag sid_dual
+```
+
+The command uses the following configuration bits, defined in `firmware/main.h`. The persisted JSON file continues to use flag names:
+
+| Bit | Flag                    | Purpose                                                                                                       |
+| --- | ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| 0 | `cia_model`             | Selects the CIA variant used for both CIA1 and CIA2 (`0` = 6526, `1` = 8521).                                 |
+| 1 | `sid_model`             | Selects the SID variant (`0` = 6581, `1` = 8580) — changes filter characteristics and the "dead" waveform.    |
+| 2 | `sid_dual`              | Enables dual-SID output: the second SID is mapped at `$D420` for stereo music playback.                       |
+| 3 | `sid_pan`               | Applies panning correction when dual-SID is active (fixes very wide stereo image with dual-SID playback).     |
+| 4 | `sid_auto_mono`         | When the second SID is idle, output is automatically summed to mono — avoids silent channel on mono software. |
+| 5 | `va_delay`              | Emulates the VA14/VA15 glitch delay of the original `U14` 74LS257 — required by some demos/effects.           |
+| 6 | `overlay`               | Enables the on-screen terminal overlay (toggled by `Print Screen` or the overlay interrupt).                  |
+| 7 | `joy_invert`            | Swaps joystick ports 1 and 2 (useful when a game expects the opposite port to the one you plugged into).      |
+| 8 | `joy_button_space`      | Maps the gamepad's second fire button to the `Space` key (useful for games using Space as a secondary fire).  |
+| 9 | `joy_emulation_0`       | Allows using the host keyboard as joystick port 1 (cursor keys + `F`/`Space` for fire).                       |
+| 10 | `joy_emulation_1`       | Same as above, but for joystick port 2.                                                                       |
+| 11 | `cart_present`          | Indicates that cartridge is present; cleared upon reboot when `/c64_roms/default.crt` is not present          |
+| 12 | `reu_present`           | Indicates that 4MiB REU is present; changes to this flag require `reset` to take effect.                      |
+| 13 | `c1541_rom_ext`         | Extended C1541 ROM (DolphinDOS)                                                                               |
+| 14 | `iec_master_disconnect` | Disconnects the C64 from the virtual IEC bus.                                                                 |
 
 ## REU support
 
