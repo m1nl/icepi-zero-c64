@@ -245,6 +245,9 @@ class BaseSoC(SoCCore):
             data_width=self.bus.data_width, address_width=self.bus.address_width, bursting=self.bus.bursting
         )
         self.drive_rom = wishbone.SRAM(drive_rom_size, bus=drive_rom_bus, name="drive_rom")
+        # The CPU loads this RAM while the drive is reset. Colliding reads are
+        # unspecified so both read ports can share the ECP5 block RAMs.
+        self.drive_rom.mem.attr = {("no_rw_check", 1)}
         self.bus.add_slave(
             name="drive_rom",
             slave=self.drive_rom.bus,
