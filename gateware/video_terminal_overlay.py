@@ -69,6 +69,7 @@ class CSIInterpreter(LiteXModule):
         self.clear_xy = Signal()
         self.clear_x = Signal()
         self.reset_x = Signal()
+        self.end_x = Signal()
         self.dec_y = Signal()
         self.incr_y = Signal()
         self.incr_x = Signal()
@@ -120,23 +121,29 @@ class CSIInterpreter(LiteXModule):
         fsm.act("GET-CSI-FINAL", sink.ready.eq(1), NextValue(csi_final, sink.data), NextState("DECODE-CSI"))
         fsm.act(
             "DECODE-CSI",
+            # Hold commands until the terminal can apply them in stream order.
             If(
-                csi_final == ord("m"),
+                source.ready,
                 If(
-                    (csi_bytes[0] == ord("9")) and (csi_bytes[1] == ord("2")),
-                    NextValue(self.color, 1),  # FIXME: Add Palette.
-                ).Else(
-                    NextValue(self.color, 0),  # FIXME: Add Palette.
+                    csi_final == ord("m"),
+                    If(
+                        (csi_bytes[0] == ord("9")) and (csi_bytes[1] == ord("2")),
+                        NextValue(self.color, 1),  # FIXME: Add Palette.
+                    ).Else(
+                        NextValue(self.color, 0),  # FIXME: Add Palette.
+                    ),
                 ),
+                If(csi_final == ord("J"), self.clear_xy.eq(1)),
+                If(csi_final == ord("K"), self.clear_x.eq(1)),
+                If(csi_final == ord("G"), self.reset_x.eq(1)),
+                If(csi_final == ord("H"), self.reset_x.eq(1)),
+                If(csi_final == ord("F"), self.end_x.eq(1)),
+                If(csi_final == ord("A"), self.dec_y.eq(1)),  # FIXME: Support multiple columns / lines
+                If(csi_final == ord("B"), self.incr_y.eq(1)),
+                If(csi_final == ord("C"), self.incr_x.eq(1)),
+                If(csi_final == ord("D"), self.dec_x.eq(1)),
+                NextState("RECOPY"),
             ),
-            If(csi_final == ord("J"), self.clear_xy.eq(1)),
-            If(csi_final == ord("K"), self.clear_x.eq(1)),
-            If(csi_final == ord("G"), self.reset_x.eq(1)),
-            If(csi_final == ord("A"), self.dec_y.eq(1)),  # FIXME: Support multiple columns / lines
-            If(csi_final == ord("B"), self.incr_y.eq(1)),
-            If(csi_final == ord("C"), self.incr_x.eq(1)),
-            If(csi_final == ord("D"), self.dec_x.eq(1)),
-            NextState("RECOPY"),
         )
 
 
@@ -186,29 +193,48 @@ class VideoTerminalOverlay(LiteXModule):
         # UART Terminal Fill.
         # -------------------
 
+        # Buffer bytes before decoding so commands cannot overtake queued text.
+        self.uart_fifo = stream.SyncFIFO([("data", 8)], 8)
+        self.comb += uart_sink.connect(self.uart_fifo.sink)
+        uart_sink = self.uart_fifo.source
+
         # Optional CSI Interpreter.
         self.csi_interpreter = CSIInterpreter(enable=with_csi_interpreter)
         self.comb += uart_sink.connect(self.csi_interpreter.sink)
         uart_sink = self.csi_interpreter.source
-        self.comb += term_wrport.dat_w[font_width:].eq(self.csi_interpreter.color)
-
-        self.uart_fifo = stream.SyncFIFO([("data", 8)], 8)
-        self.comb += uart_sink.connect(self.uart_fifo.sink)
-        uart_sink = self.uart_fifo.source
+        if csi_width:
+            self.comb += term_wrport.dat_w[font_width:].eq(self.csi_interpreter.color)
 
         # UART Reception and Terminal Fill.
         x_term = Signal(7)
         x_term_i = Signal(7)
         y_term = Signal(6)
-        y_term_rollover = Signal()
+        # Keep the display origin separate from the cursor in the row ring.
+        top_row = Signal(6)
+        next_row = Signal(6)
+        previous_row = Signal(6)
+        bottom_row = Signal(6)
+        line_wrapped = Array([Signal() for _ in range(term_lines)])
+        self.comb += [
+            next_row.eq(Mux(y_term == term_lines - 1, 0, y_term + 1)),
+            previous_row.eq(Mux(y_term == 0, term_lines - 1, y_term - 1)),
+            bottom_row.eq(Mux(top_row == 0, term_lines - 1, top_row - 1)),
+        ]
         self.comb += term_wrport.adr.eq(x_term + (y_term * term_columns_2))
         self.uart_fsm = uart_fsm = FSM(reset_state="RESET")
-        uart_fsm.act("RESET", NextValue(x_term, 0), NextValue(x_term_i, 0), NextValue(y_term, 0), NextState("CLEAR-XY"))
+        uart_fsm.act(
+            "RESET",
+            NextValue(x_term, 0),
+            NextValue(x_term_i, 0),
+            NextValue(y_term, 0),
+            NextValue(top_row, 0),
+            NextState("CLEAR-XY"),
+        )
         uart_fsm.act(
             "CLEAR-XY",
             term_wrport.we.eq(1),
             term_wrport.dat_w[:font_width].eq(ord(" ")),
-            NextValue(y_term_rollover, 0),
+            NextValue(line_wrapped[y_term], 0),
             NextValue(x_term, x_term + 1),
             If(
                 x_term == (term_columns - 1),
@@ -219,20 +245,33 @@ class VideoTerminalOverlay(LiteXModule):
         )
         uart_fsm.act(
             "IDLE",
+            uart_sink.ready.eq(1),
             If(
                 uart_sink.valid,
-                If(uart_sink.data == ord("\n"), uart_sink.ready.eq(1), NextState("INCR-Y"))  # Ack sink.
+                If(
+                    uart_sink.data == ord("\n"),
+                    uart_sink.ready.eq(1),
+                    NextValue(line_wrapped[y_term], 0),
+                    NextState("INCR-Y"),
+                )
                 .Elif(uart_sink.data == ord("\r"), uart_sink.ready.eq(1), NextState("RST-X"))  # Ack sink.
                 .Elif(uart_sink.data == ord("\b"), uart_sink.ready.eq(1), NextState("DEC-X"))  # Ack sink.
-                .Else(NextState("WRITE")),
+                .Else(uart_sink.ready.eq(0), NextState("WRITE")),
             ),
-            If(self.csi_interpreter.clear_xy, NextValue(x_term, 0), NextState("CLEAR-XY")),
+            If(
+                self.csi_interpreter.clear_xy,
+                NextValue(x_term, 0),
+                NextValue(y_term, 0),
+                NextValue(top_row, 0),
+                NextState("CLEAR-XY"),
+            ),
             If(self.csi_interpreter.clear_x, NextState("CLEAR-X")),
             If(self.csi_interpreter.reset_x, NextState("RST-X")),
-            If(self.csi_interpreter.dec_y, NextState("DEC-Y")),
-            If(self.csi_interpreter.incr_y, NextState("INCR-Y")),
-            If(self.csi_interpreter.incr_x, NextState("INCR-X")),
-            If(self.csi_interpreter.dec_x, NextState("DEC-X")),
+            If(self.csi_interpreter.end_x, NextState("END-X")),
+            If(self.csi_interpreter.dec_y, NextState("CURSOR-UP")),
+            If(self.csi_interpreter.incr_y, NextState("CURSOR-DOWN")),
+            If(self.csi_interpreter.incr_x, NextState("CURSOR-RIGHT")),
+            If(self.csi_interpreter.dec_x, NextState("CURSOR-LEFT")),
             NextValue(x_term_i, x_term),
         )
         uart_fsm.act(
@@ -244,31 +283,78 @@ class VideoTerminalOverlay(LiteXModule):
         )
         uart_fsm.act(
             "CLEAR",
-            uart_sink.ready.eq(1),
             term_wrport.we.eq(1),
             term_wrport.dat_w[:font_width].eq(ord(" ")),
             NextState("IDLE"),
         )
         uart_fsm.act("RST-X", NextValue(x_term, 0), NextState("IDLE"))
-        uart_fsm.act("DEC-X", NextValue(x_term, x_term - 1), If(x_term == 0, NextValue(x_term, 0)), NextState("CLEAR"))
+        uart_fsm.act("END-X", NextValue(x_term, term_columns - 1), NextState("IDLE"))
+        uart_fsm.act(
+            "CURSOR-LEFT",
+            If(x_term != 0, NextValue(x_term, x_term - 1)).Elif(
+                (y_term != top_row) & line_wrapped[previous_row],
+                NextValue(x_term, term_columns - 1),
+                NextValue(y_term, previous_row),
+            ),
+            NextState("IDLE"),
+        )
+        uart_fsm.act(
+            "CURSOR-RIGHT",
+            If(x_term != (term_columns - 1), NextValue(x_term, x_term + 1)).Elif(
+                (y_term != bottom_row) & line_wrapped[y_term],
+                NextValue(x_term, 0),
+                NextValue(y_term, next_row),
+            ),
+            NextState("IDLE"),
+        )
+        uart_fsm.act(
+            "DEC-X",
+            NextState("IDLE"),
+            If(x_term != 0, NextValue(x_term, x_term - 1), NextState("CLEAR")).Elif(
+                (y_term != top_row) & line_wrapped[previous_row],
+                NextValue(x_term, term_columns - 1),
+                NextValue(y_term, previous_row),
+                NextState("CLEAR"),
+            ),
+        )
         uart_fsm.act(
             "INCR-X",
             NextValue(x_term, x_term + 1),
             NextState("IDLE"),
-            If(x_term == (term_columns - 1), NextValue(x_term_i, 0), NextState("INCR-Y")),
+            If(
+                x_term == (term_columns - 1),
+                NextValue(x_term, 0),
+                # Redrawing a wrapped line must preserve the next row's text.
+                If(
+                    line_wrapped[y_term] & (y_term != bottom_row),
+                    NextValue(y_term, next_row),
+                ).Else(
+                    NextValue(line_wrapped[y_term], 1),
+                    NextState("INCR-Y"),
+                ),
+            ),
         )
-        uart_fsm.act("RST-Y", NextValue(y_term, 0), NextValue(x_term_i, 0), NextState("CLEAR-X"))
         uart_fsm.act(
-            "DEC-Y",
-            NextValue(y_term, y_term - 1),
-            If(y_term == 0, NextValue(y_term, 0), NextState("IDLE")),
+            "CURSOR-UP",
+            If(y_term != top_row, NextValue(y_term, previous_row)),
+            NextState("IDLE"),
+        )
+        uart_fsm.act(
+            "CURSOR-DOWN",
+            If(y_term != bottom_row, NextValue(y_term, next_row)),
+            NextState("IDLE"),
         )
         uart_fsm.act(
             "INCR-Y",
-            NextValue(y_term, y_term + 1),
+            NextValue(y_term, next_row),
             NextValue(x_term, 0),
+            NextValue(x_term_i, 0),
+            NextValue(line_wrapped[next_row], 0),
             NextState("CLEAR-X"),
-            If(y_term == (term_lines - 1), NextValue(y_term_rollover, 1), NextState("RST-Y")),
+            If(
+                y_term == bottom_row,
+                NextValue(top_row, Mux(top_row == term_lines - 1, 0, top_row + 1)),
+            ),
         )
         uart_fsm.act(
             "CLEAR-X",
@@ -304,12 +390,8 @@ class VideoTerminalOverlay(LiteXModule):
         y_rollover = Signal(len(y_term))
         y_rollover_sum = Signal(len(y_rollover) + 1)
 
-        self.comb += y_rollover_sum.eq(y + y_term + 1)
-        self.comb += [
-            If(~y_term_rollover, y_rollover.eq(y)).Else(
-                y_rollover.eq(Mux(y_rollover_sum >= term_lines, y_rollover_sum - term_lines, y_rollover_sum))
-            )
-        ]
+        self.comb += y_rollover_sum.eq(y + top_row)
+        self.comb += y_rollover.eq(Mux(y_rollover_sum >= term_lines, y_rollover_sum - term_lines, y_rollover_sum))
 
         # Get character from Terminal Mem.
         term_dat_r = Signal(font_width)
@@ -352,7 +434,7 @@ class VideoTerminalOverlay(LiteXModule):
             If(
                 bit,
                 Case(
-                    term_rdport.dat_r[font_width:],
+                    term_rdport.dat_r[font_width:] if csi_width else Constant(0, 4),
                     {
                         0: [rgb.eq(0xFFFFFF)],
                         1: [rgb.eq(0x89E234)],
