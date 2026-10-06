@@ -21,7 +21,7 @@ SECTIONS
 		_etext = .;
 	} > main_ram
 
-	.text_sram :
+	.text_sram : ALIGN(4)
 	{
 		. = ALIGN(4);
 		_ftext_sram = .;
@@ -42,7 +42,10 @@ SECTIONS
 		_erodata = .;
 	} > main_ram
 
-	.data :
+	/* Align the section itself so its ROM image starts at _fdata too.
+	 * Aligning only inside the section can leave leading padding in the
+	 * ROM image, shifting initialized data (including stdout) at startup. */
+	.data : ALIGN(8)
 	{
 		. = ALIGN(8);
 		_fdata = .;
@@ -75,11 +78,11 @@ _heap_end  = _ftext + 8M;
 
 PROVIDE(_fstack = ORIGIN(sram) + LENGTH(sram));
 
-PROVIDE(_ftext_sram_rom = LOADADDR(.text_sram));
-PROVIDE(_etext_sram_rom = LOADADDR(.text_sram) + SIZEOF(.text_sram));
+PROVIDE(_ftext_sram_rom = LOADADDR(.text_sram) + (_ftext_sram - ADDR(.text_sram)));
+PROVIDE(_etext_sram_rom = _ftext_sram_rom + (_etext_sram - _ftext_sram));
 
-PROVIDE(_fdata_rom = LOADADDR(.data));
-PROVIDE(_edata_rom = LOADADDR(.data) + SIZEOF(.data));
+PROVIDE(_fdata_rom = LOADADDR(.data) + (_fdata - ADDR(.data)));
+PROVIDE(_edata_rom = _fdata_rom + (_edata - _fdata));
 
 PROVIDE(_fheap = _heap_base);
 PROVIDE(_eheap = _heap_end);
