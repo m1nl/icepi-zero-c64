@@ -50,6 +50,6 @@ VPATH = $(BIOS_DIRECTORY):$(BIOS_DIRECTORY)/cmds:$(CPU_DIRECTORY)
 	$(assemble)
 
 clean:
-	$(RM) $(OBJECTS) icepi-zero-c64.elf icepi-zero-c64.bin .*~ *~
+	$(RM) $(OBJECTS) $(OBJECTS:.o=.d) icepi-zero-c64.elf icepi-zero-c64.elf.map icepi-zero-c64.bin .*~ *~
 
 .PHONY: all clean
