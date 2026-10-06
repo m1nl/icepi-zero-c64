@@ -162,7 +162,7 @@ always @(*) begin
       reg_1_init[1] = !cart_exrom;
 
       exrom = !reg_1[1];
-      game  = reg_1[2] ? !reg_1[1] : cart_game;
+      game  = reg_1[2] ? !reg_1[0] : cart_game;
 
       io2_we_valid = 1'b1;
 
