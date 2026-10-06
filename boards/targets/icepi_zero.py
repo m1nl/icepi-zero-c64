@@ -31,6 +31,7 @@ from gateware.video_terminal_overlay import VideoTerminalOverlay
 SYS_CLK_FREQUENCY = 31.43e6
 TMDS_CLK_FREQUENCY = SYS_CLK_FREQUENCY * 35 / 40
 USB_CLK_FREQ = 60e6
+ABC9_DELAY_TARGET_PS = 10_728
 
 
 class _CRG(LiteXModule):
@@ -100,16 +101,25 @@ class BaseSoC(SoCCore):
         with_spi_flash=True,
         with_external_leds=False,
         with_joysticks=False,
+        abc9_delay_target=ABC9_DELAY_TARGET_PS,
         **kwargs,
     ):
         if toolchain != "trellis":
             raise ValueError("Only trellis toolchain is supported")
+        if abc9_delay_target <= 0:
+            raise ValueError("ABC9 delay target must be positive (picoseconds)")
 
         platform = icepi_zero.Platform(device=device, toolchain=toolchain)
 
         # Customized Yosys build template to support defines ---------------------------------------
-        template = YosysWrapper._default_template
+        template = list(YosysWrapper._default_template)
         template.insert(template.index("{read_files}"), "verilog_defines -DNO_MOS8520")
+        # Keep ABC9 area recovery independent of the scaler's removed divider.
+        # This is a mapper budget; the CRG still supplies physical clock constraints.
+        template.insert(
+            template.index("{yosys_cmds}") + 1,
+            f"scratchpad -set abc9.D {abc9_delay_target}",
+        )
         platform.toolchain._yosys_template = template
 
         # CRG --------------------------------------------------------------------------------------
@@ -320,6 +330,10 @@ def main():
     parser.add_target_argument("--with-external-leds", action="store_true", help="Enable expansion-board green/yellow/red LEDs.")
     parser.add_target_argument("--with-joysticks", action="store_true", help="Enable both expansion-board joystick ports with pull-ups.")
     parser.add_target_argument("--sys-clk-freq", default=SYS_CLK_FREQUENCY, type=float, help="System clock frequency.")
+    parser.add_target_argument(
+        "--abc9-delay-target", default=ABC9_DELAY_TARGET_PS, type=int,
+        help="ABC9 mapping delay target in picoseconds (physical clock constraints remain separate).",
+    )
 
     parser.set_defaults(
         sys_clk_freq=SYS_CLK_FREQUENCY,
@@ -345,6 +359,7 @@ def main():
         with_spi_flash=args.with_spi_flash,
         with_external_leds=args.with_external_leds,
         with_joysticks=args.with_joysticks,
+        abc9_delay_target=args.abc9_delay_target,
         **parser.soc_argdict,
     )
 

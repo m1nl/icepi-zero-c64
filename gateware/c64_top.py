@@ -363,6 +363,8 @@ class C64Top(Module):
         platform.add_source(os.path.join(vicii_kawari_hdl_dir, "colorreg.v"))
         platform.add_source(os.path.join(vicii_kawari_hdl_dir, "sprites.v"))
         platform.add_source(os.path.join(vicii_kawari_hdl_dir, "registers_scaled.v"))
+        platform.add_source(os.path.join(vicii_kawari_hdl_dir, "scaler_mul_generic.v"))
+        platform.add_source(os.path.join(vicii_kawari_hdl_dir, "scaler_mul_ecp5.v"))
         platform.add_source(os.path.join(vicii_kawari_hdl_dir, "raster.v"))
         platform.add_source(os.path.join(vicii_kawari_hdl_dir, "pixel_sequencer.v"))
         platform.add_source(os.path.join(vicii_kawari_hdl_dir, "matrix.v"))

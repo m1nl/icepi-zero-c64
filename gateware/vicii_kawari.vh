@@ -74,4 +74,26 @@
 // to be valid and it doesn't become valid until at least [2].
 `define MUX_ROW 2
 
+// The ECP5 build uses an explicit ABC9 mapping delay target of 10,728 ps to
+// preserve area recovery when the VIC scaler uses DSP multiplication. Override
+// it with `--abc9-delay-target <picoseconds>` when tuning synthesis. This controls
+// the mapper's area/speed tradeoff; the actual clock constraints remain separate.
+// Check the final routed timing results after changing this setting.
+//
+// `SCALER_USE_MUL` selects reciprocal multiplication; `SCALER_ECP5_DSP_REG`
+// selects explicit ECP5 DSP output registers while preserving pixel latency.
+// Comment out the second define to use inferred multipliers with fabric result
+// registers, or the first to restore the divider.
+
+// The portable `scaler_mul_generic.v` and ECP5-only
+// `scaler_mul_ecp5.v` modules live in `gateware/vicii-kawari/hdl/`;
+// `registers_scaled.v` selects and instantiates them. Leave
+// `SCALER_ECP5_DSP_REG` undefined for other FPGA families. Rebuild gateware after
+// changing either option.
+
+// Use reciprocal multiplication for the RGB scaler, preserving pixel latency.
+`define SCALER_USE_MUL 1
+// ECP5: replace the fabric result registers with DSP output registers.
+`define SCALER_ECP5_DSP_REG 1
+
 `endif // config_vh_
