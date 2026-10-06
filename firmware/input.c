@@ -90,6 +90,10 @@ static int8_t hid_keycode_to_fkey(uint8_t keycode) {
 
 static uint8_t hid_keycode_to_control(uint8_t keycode) {
     switch (keycode) {
+        case 0x4a:
+            return 'H'; // home
+        case 0x4d:
+            return 'F'; // end
         case 0x51:
             return 'B'; // down
         case 0x52:

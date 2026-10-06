@@ -316,7 +316,13 @@ bool embedded_cli_insert_char(struct embedded_cli *cli, char ch) {
                     cli->cursor = 0;
                     break;
                 case '~':
-                    if (cli->counter == 3) { // delete key
+                    if (cli->counter == 1 || cli->counter == 7) { // home key
+                        term_cursor_back(cli, cli->cursor);
+                        cli->cursor = 0;
+                    } else if (cli->counter == 4 || cli->counter == 8) { // end key
+                        term_cursor_fwd(cli, cli->len - cli->cursor);
+                        cli->cursor = cli->len;
+                    } else if (cli->counter == 3) { // delete key
                         if (cli->cursor < cli->len) {
                             memmove(&cli->buffer[cli->cursor], &cli->buffer[cli->cursor + 1], cli->len - cli->cursor);
                             cli->len--;
@@ -416,6 +422,12 @@ bool embedded_cli_insert_char(struct embedded_cli *cli, char ch) {
                 cli->cursor = 0;
                 break;
             case '[':
+                if (cli->have_escape)
+                    cli->have_csi = true;
+                else
+                    embedded_cli_insert_default_char(cli, ch);
+                break;
+            case 'O': // SS3 Home/End (ESC O H / ESC O F).
                 if (cli->have_escape)
                     cli->have_csi = true;
                 else

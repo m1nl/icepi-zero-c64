@@ -77,6 +77,10 @@ int main(void) {
     KEY(0x51, 0x51, 0xe0, 0x72); expect_text("\x1b[B");
     KEY(0x50, 0x50, 0xe0, 0x6b); expect_text("\x1b[D");
     KEY(0x4f, 0x4f, 0xe0, 0x74); expect_text("\x1b[C");
+    KEY(0x4a, 0x4a, 0xe0, 0x6c); expect_text("\x1b[H");
+    KEY(0xca, 0x4a, 0xe0, 0xf0, 0x6c); expect_text("");
+    KEY(0x4d, 0x4d, 0xe0, 0x69); expect_text("\x1b[F");
+    KEY(0xcd, 0x4d, 0xe0, 0xf0, 0x69); expect_text("");
     KEY(0x3a, 0x3a, 5); expect_text("\x1b[11~"); assert(ps2_count == 0);
     KEY(0x28, 0x28, 0x5a); expect_text("\n");
     KEY(0x2a, 0x2a, 0x66); expect_text("\b");
@@ -87,6 +91,10 @@ int main(void) {
     // Native HID and SPI use the same console translator.
     native_key = 5; native_modifiers = 2;
     input_isr(EV_HID_KEY); expect_text("B");
+    native_key = 0x4a; native_modifiers = 0;
+    input_isr(EV_HID_KEY); expect_text("\x1b[H");
+    native_key = 0x4d;
+    input_isr(EV_HID_KEY); expect_text("\x1b[F");
     // Closing while Shift is held synchronizes the core modifier state.
     KEY(0x69, 1, 0x12); assert(ps2_count == 0);
     print_make(); assert(!(flags & OVERLAY_MASK)); EXPECT_PS2(0x12);
