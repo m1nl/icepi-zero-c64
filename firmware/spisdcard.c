@@ -11,21 +11,27 @@
 #include <generated/csr.h>
 #include <generated/mem.h>
 #include <generated/soc.h>
+#include <libbase/timeout.h>
 #include <system.h>
 
 #include "ff.h"
+
 #include "diskio.h"
 #include "spisdcard.h"
 
 #ifdef CSR_SPISDCARD_BASE
 
-//#define SPISDCARD_DEBUG
+// #define SPISDCARD_DEBUG
 
 #ifndef SPISDCARD_CLK_FREQ_INIT
 #define SPISDCARD_CLK_FREQ_INIT 400000
 #endif
 #ifndef SPISDCARD_CLK_FREQ
 #define SPISDCARD_CLK_FREQ 20000000
+#endif
+
+#ifndef SPISDCARD_XFER_TIMEOUT_US
+#define SPISDCARD_XFER_TIMEOUT_US 10000
 #endif
 
 /* OCR CCS bit: 1 on high/extended capacity cards (block addressing), 0 on
@@ -38,15 +44,15 @@ static uint8_t spisdcard_ccs = 1;
 
 static void spi_set_clk_freq(uint32_t clk_freq) {
     uint32_t divider;
-    divider = CONFIG_CLOCK_FREQUENCY/clk_freq + 1;
-    divider = max(divider,     2);
-    divider = min(divider,   256);
+    divider = CONFIG_CLOCK_FREQUENCY / clk_freq + 1;
+    divider = max(divider, 2);
+    divider = min(divider, 256);
 #ifdef SPISDCARD_DEBUG
     printf("Setting SDCard clk freq to ");
     if (clk_freq > 1000000)
-        printf("%ld MHz\n", (CONFIG_CLOCK_FREQUENCY/divider)/1000000);
+        printf("%d MHz\n", (CONFIG_CLOCK_FREQUENCY / divider) / 1000000);
     else
-        printf("%ld KHz\n", (CONFIG_CLOCK_FREQUENCY/divider)/1000);
+        printf("%d kHz\n", (CONFIG_CLOCK_FREQUENCY / divider) / 1000);
 #endif
     spisdcard_clk_divider_write(divider);
 }
@@ -55,13 +61,29 @@ static void spi_set_clk_freq(uint32_t clk_freq) {
 /* SPI SDCard low-level functions                                        */
 /*----------------------------------------------------------------------*/
 
-static uint8_t spi_xfer(uint8_t byte) {
+static int spi_wait_done(void) {
+    struct timeout timeout;
+
+    if (spisdcard_status_read() & SPI_DONE)
+        return 1;
+    timeout_start(&timeout, SPISDCARD_XFER_TIMEOUT_US);
+    while (!(spisdcard_status_read() & SPI_DONE)) {
+        if (timeout_expired(&timeout)) {
+            printf("SPI SDCard transfer timeout\n");
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int spi_xfer(uint8_t byte) {
     /* Write byte on MOSI */
     spisdcard_mosi_write(byte);
     /* Initiate SPI Xfer */
-    spisdcard_control_write(8*SPI_LENGTH | SPI_START);
+    spisdcard_control_write(8 * SPI_LENGTH | SPI_START);
     /* Wait SPI Xfer to be done */
-    while((spisdcard_status_read() & SPI_DONE) != SPI_DONE);
+    if (!spi_wait_done())
+        return -1;
     /* Read MISO and return it */
     return spisdcard_miso_read();
 }
@@ -70,11 +92,11 @@ static uint8_t spi_xfer(uint8_t byte) {
 /* SPI SDCard Select/Deselect functions                                  */
 /*-----------------------------------------------------------------------*/
 
-static void spisdcard_deselect(void) {
+static int spisdcard_deselect(void) {
     /* Set SPI CS High */
     spisdcard_cs_write(SPI_CS_HIGH);
     /* Generate 8 dummy clocks */
-    spi_xfer(0xff);
+    return spi_xfer(0xff) >= 0;
 }
 
 static int spisdcard_select(void) {
@@ -84,12 +106,16 @@ static int spisdcard_select(void) {
     spisdcard_cs_write(SPI_CS_LOW);
 
     /* Generate 8 dummy clocks */
-    spi_xfer(0xff);
+    if (spi_xfer(0xff) < 0)
+        return 0;
 
     /* Wait 500ms for the card to be ready */
     timeout = 500;
-    while(timeout > 0) {
-        if (spi_xfer(0xff) == 0xff)
+    while (timeout > 0) {
+        int byte = spi_xfer(0xff);
+        if (byte < 0)
+            return 0;
+        if (byte == 0xff)
             return 1;
         busy_wait(1);
         timeout--;
@@ -105,16 +131,23 @@ static int spisdcard_select(void) {
 /* SPI SDCard bytes Xfer functions                                       */
 /*-----------------------------------------------------------------------*/
 
-static void spisdcardwrite_bytes(uint8_t* buf, uint16_t n) {
+static int spisdcardwrite_bytes(uint8_t *buf, uint16_t n) {
     uint16_t i;
-    for (i=0; i<n; i++)
-        spi_xfer(buf[i]);
+    for (i = 0; i < n; i++)
+        if (spi_xfer(buf[i]) < 0)
+            return 0;
+    return 1;
 }
 
-static void spisdcardread_bytes(uint8_t* buf, uint16_t n) {
+static int spisdcardread_bytes(uint8_t *buf, uint16_t n) {
     uint16_t i;
-    for (i=0; i<n; i++)
-        buf[i] = spi_xfer(0xff);
+    for (i = 0; i < n; i++) {
+        int byte = spi_xfer(0xff);
+        if (byte < 0)
+            return 0;
+        buf[i] = byte;
+    }
+    return 1;
 }
 
 /*-----------------------------------------------------------------------*/
@@ -127,8 +160,11 @@ static uint8_t spisdcardreceive_block(uint8_t *buf) {
 
     /* Wait 100ms for a start of block */
     timeout = 100000;
-    while(timeout > 0) {
-        if (spi_xfer(0xff) == 0xfe)
+    while (timeout > 0) {
+        int byte = spi_xfer(0xff);
+        if (byte < 0)
+            return 0;
+        if (byte == 0xfe)
             break;
         busy_wait_us(1);
         timeout--;
@@ -138,15 +174,16 @@ static uint8_t spisdcardreceive_block(uint8_t *buf) {
 
     /* Receive block */
     spisdcard_mosi_write(0xff);
-    for (i=0; i<512; i++) {
-        spisdcard_control_write(8*SPI_LENGTH | SPI_START);
-        while ((spisdcard_status_read() & SPI_DONE) != SPI_DONE);
+    for (i = 0; i < 512; i++) {
+        spisdcard_control_write(8 * SPI_LENGTH | SPI_START);
+        if (!spi_wait_done())
+            return 0;
         *buf++ = spisdcard_miso_read();
     }
 
     /* Discard CRC */
-    spi_xfer(0xff);
-    spi_xfer(0xff);
+    if (spi_xfer(0xff) < 0 || spi_xfer(0xff) < 0)
+        return 0;
 
     return 1;
 }
@@ -155,8 +192,7 @@ static uint8_t spisdcardreceive_block(uint8_t *buf) {
 /* SPI SDCard Command functions                                          */
 /*-----------------------------------------------------------------------*/
 
-static uint8_t spisdcardsend_cmd(uint8_t cmd, uint32_t arg)
-{
+static int spisdcardsend_cmd(uint8_t cmd, uint32_t arg) {
     uint8_t byte;
     uint8_t buf[6];
     uint8_t timeout;
@@ -164,9 +200,9 @@ static uint8_t spisdcardsend_cmd(uint8_t cmd, uint32_t arg)
     /* Send CMD55 for ACMD */
     if (cmd & 0x80) {
         cmd &= 0x7f;
-        byte = spisdcardsend_cmd(CMD55, 0);
-        if (byte > 1)
-            return byte;
+        int response = spisdcardsend_cmd(CMD55, 0);
+        if (response < 0 || response > 1)
+            return response;
     }
 
     /* Select the card and wait for it, except for:
@@ -174,31 +210,34 @@ static uint8_t spisdcardsend_cmd(uint8_t cmd, uint32_t arg)
        - CMD0 : GO_IDLE_STATE.
     */
     if (cmd != CMD12 && cmd != CMD0) {
-        spisdcard_deselect();
+        if (!spisdcard_deselect())
+            return -1;
         if (spisdcard_select() == 0)
-            return 0xff;
+            return -1;
     }
 
     /* Send Command */
-    buf[0] = 0x40 | cmd;            /* Start + Command */
-    buf[1] = (uint8_t)(arg >> 24);  /* Argument[31:24] */
-    buf[2] = (uint8_t)(arg >> 16);  /* Argument[23:16] */
-    buf[3] = (uint8_t)(arg >> 8);   /* Argument[15:8] */
-    buf[4] = (uint8_t)(arg >> 0);   /* Argument[7:0] */
+    buf[0] = 0x40 | cmd;           /* Start + Command */
+    buf[1] = (uint8_t)(arg >> 24); /* Argument[31:24] */
+    buf[2] = (uint8_t)(arg >> 16); /* Argument[23:16] */
+    buf[3] = (uint8_t)(arg >> 8);  /* Argument[15:8] */
+    buf[4] = (uint8_t)(arg >> 0);  /* Argument[7:0] */
     if (cmd == CMD0)
-        buf[5] = 0x95;      /* Valid CRC for CMD0 */
+        buf[5] = 0x95; /* Valid CRC for CMD0 */
     else if (cmd == CMD8)
-        buf[5] = 0x87;      /* Valid CRC for CMD8 (0x1AA) */
+        buf[5] = 0x87; /* Valid CRC for CMD8 (0x1AA) */
     else
-        buf[5] = 0x01;      /* Dummy CRC + Stop */
-    spisdcardwrite_bytes(buf, 6);
+        buf[5] = 0x01; /* Dummy CRC + Stop */
+    if (!spisdcardwrite_bytes(buf, 6))
+        return -1;
 
     /* Receive Command response */
-    if (cmd == CMD12)
-        spisdcardread_bytes(&byte, 1);  /* Read stuff byte */
+    if (cmd == CMD12 && !spisdcardread_bytes(&byte, 1)) /* Read stuff byte */
+        return -1;
     timeout = 10; /* Wait for a valid response (up to 10 attempts) */
     while (timeout > 0) {
-        spisdcardread_bytes(&byte, 1);
+        if (!spisdcardread_bytes(&byte, 1))
+            return -1;
         if ((byte & 0x80) == 0)
             break;
 
@@ -212,9 +251,10 @@ static uint8_t spisdcardsend_cmd(uint8_t cmd, uint32_t arg)
 /*-----------------------------------------------------------------------*/
 
 uint8_t spisdcard_init(void) {
-    uint8_t  i;
-    uint8_t  buf[4];
+    uint8_t i;
+    uint8_t buf[4];
     uint16_t timeout;
+    int response;
 
     /* Set SPI clk freq to initialization frequency */
     spi_set_clk_freq(SPISDCARD_CLK_FREQ_INIT);
@@ -223,12 +263,16 @@ uint8_t spisdcard_init(void) {
     while (timeout) {
         /* Set SDCard in SPI Mode (generate 80 dummy clocks) */
         spisdcard_cs_write(SPI_CS_HIGH);
-        for (i=0; i<10; i++)
-            spi_xfer(0xff);
+        for (i = 0; i < 10; i++)
+            if (spi_xfer(0xff) < 0)
+                return 0;
         spisdcard_cs_write(SPI_CS_LOW);
 
         /* Set SDCard in Idle state */
-        if (spisdcardsend_cmd(CMD0, 0) == 0x1)
+        response = spisdcardsend_cmd(CMD0, 0);
+        if (response < 0)
+            return 0;
+        if (response == 0x1)
             break;
 
         timeout--;
@@ -239,12 +283,16 @@ uint8_t spisdcard_init(void) {
     /* Set SDCard voltages, only supported by ver2.00+ SDCards */
     if (spisdcardsend_cmd(CMD8, 0x1AA) != 0x1)
         return 0;
-    spisdcardread_bytes(buf, 4); /* Get additional bytes of R7 response */
+    if (!spisdcardread_bytes(buf, 4)) /* Get additional bytes of R7 response */
+        return 0;
 
     /* Set SDCard in Operational state (1s timeout) */
     timeout = 1000;
     while (timeout > 0) {
-        if (spisdcardsend_cmd(ACMD41, 1 << 30) == 0)
+        response = spisdcardsend_cmd(ACMD41, 1 << 30);
+        if (response < 0)
+            return 0;
+        if (response == 0)
             break;
         busy_wait(1);
         timeout--;
@@ -256,7 +304,8 @@ uint8_t spisdcard_init(void) {
        take byte addresses in block commands instead of block addresses. */
     if (spisdcardsend_cmd(CMD58, 0) != 0)
         return 0;
-    spisdcardread_bytes(buf, 4); /* Get trailing bytes of R3 response (OCR) */
+    if (!spisdcardread_bytes(buf, 4)) /* Get trailing bytes of R3 response (OCR) */
+        return 0;
     spisdcard_ccs = (buf[0] >> 6) & 0x1;
 
     /* Set SPI clk freq to operational frequency */
@@ -272,15 +321,18 @@ uint8_t spisdcard_init(void) {
 DSTATUS spisdcardstatus = STA_NOINIT;
 
 DSTATUS disk_status(BYTE drv) {
-    if (drv) return STA_NOINIT;
+    if (drv)
+        return STA_NOINIT;
     return spisdcardstatus;
 }
 
 DSTATUS disk_initialize(BYTE drv) {
-    if (drv) return STA_NOINIT;
+    if (drv)
+        return STA_NOINIT;
     if (spisdcardstatus) {
         spisdcardstatus = spisdcard_init() ? 0 : STA_NOINIT;
-        spisdcard_deselect();
+        if (!spisdcard_deselect())
+            spisdcardstatus = STA_NOINIT;
     }
     return spisdcardstatus;
 }
@@ -288,6 +340,9 @@ DSTATUS disk_initialize(BYTE drv) {
 DRESULT disk_read(BYTE drv, BYTE *buf, LBA_t block, UINT count) {
     uint8_t cmd;
     uint32_t addr;
+    int stopped = 1;
+    if (drv || count == 0)
+        return RES_PARERR;
     if (count > 1)
         cmd = CMD18; /* READ_MULTIPLE_BLOCK */
     else
@@ -296,35 +351,37 @@ DRESULT disk_read(BYTE drv, BYTE *buf, LBA_t block, UINT count) {
        byte address always fits in 32-bit). */
     addr = spisdcard_ccs ? block : block * 512;
     if (spisdcardsend_cmd(cmd, addr) == 0) {
-        while(count > 0) {
+        while (count > 0) {
             if (spisdcardreceive_block(buf) == 0)
                 break;
             buf += 512;
             count--;
         }
         if (cmd == CMD18)
-            spisdcardsend_cmd(CMD12, 0); /* STOP_TRANSMISSION */
+            stopped = spisdcardsend_cmd(CMD12, 0) == 0; /* STOP_TRANSMISSION */
     }
-    spisdcard_deselect();
+    int deselected = spisdcard_deselect();
 
-    if (count)
+    if (count || !stopped || !deselected)
         return RES_ERROR;
 
     return RES_OK;
 }
-
 
 /*-----------------------------------------------------------------------*/
 /* SPI SDCard block write functions                                      */
 /*-----------------------------------------------------------------------*/
 
 static int spisdcardsend_block(const uint8_t *buf, uint8_t token) {
-    uint8_t resp;
+    int resp;
     uint32_t timeout;
 
     timeout = 100000;
     while (timeout > 0) {
-        if (spi_xfer(0xff) == 0xff)
+        int byte = spi_xfer(0xff);
+        if (byte < 0)
+            return 0;
+        if (byte == 0xff)
             break;
         busy_wait_us(1);
         timeout--;
@@ -332,18 +389,22 @@ static int spisdcardsend_block(const uint8_t *buf, uint8_t token) {
     if (timeout == 0)
         return 0;
 
-    spi_xfer(token);
+    if (spi_xfer(token) < 0)
+        return 0;
 
     if (token != 0xfd) {
         for (int i = 0; i < 512; i++)
-            spi_xfer(buf[i]);
+            if (spi_xfer(buf[i]) < 0)
+                return 0;
 
-        spi_xfer(0xff);
-        spi_xfer(0xff);
+        if (spi_xfer(0xff) < 0 || spi_xfer(0xff) < 0)
+            return 0;
 
         timeout = 10;
         do {
             resp = spi_xfer(0xff);
+            if (resp < 0)
+                return 0;
             timeout--;
         } while (resp == 0xff && timeout > 0);
 
@@ -353,7 +414,10 @@ static int spisdcardsend_block(const uint8_t *buf, uint8_t token) {
 
     timeout = 250000;
     while (timeout > 0) {
-        if (spi_xfer(0xff) == 0xff)
+        int byte = spi_xfer(0xff);
+        if (byte < 0)
+            return 0;
+        if (byte == 0xff)
             break;
         busy_wait_us(1);
         timeout--;
@@ -365,8 +429,9 @@ static int spisdcardsend_block(const uint8_t *buf, uint8_t token) {
 DRESULT disk_write(BYTE drv, const BYTE *buf, LBA_t block, UINT count) {
     uint8_t cmd;
     uint32_t addr;
+    int stopped = 1;
 
-    if (count == 0)
+    if (drv || count == 0)
         return RES_PARERR;
 
     // Single-block = CMD24, multiple-block = CMD25
@@ -397,49 +462,48 @@ DRESULT disk_write(BYTE drv, const BYTE *buf, LBA_t block, UINT count) {
     // End multiple-block write
     if (cmd == CMD25) {
         // Stop Tran token = 0xfd
-        spisdcardsend_block(NULL, 0xfd);
+        stopped = spisdcardsend_block(NULL, 0xfd);
     }
 
-    spisdcard_deselect();
+    int deselected = spisdcard_deselect();
 
-    return (count == 0) ? RES_OK : RES_ERROR;
+    return (count == 0 && stopped && deselected) ? RES_OK : RES_ERROR;
 }
 
-DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff)
-{
+DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
     if (pdrv != 0)
         return RES_PARERR;
 
-    switch(cmd) {
+    switch (cmd) {
         case CTRL_SYNC:
             return RES_OK;
 
         case GET_SECTOR_COUNT:
             // if you don't know, return a high number
-            *(DWORD*)buff = 0x100000;
+            *(DWORD *)buff = 0x100000;
             return RES_OK;
 
         case GET_SECTOR_SIZE:
-            *(WORD*)buff = 512;
+            *(WORD *)buff = 512;
             return RES_OK;
 
         case GET_BLOCK_SIZE:
-            *(DWORD*)buff = 1;
+            *(DWORD *)buff = 1;
             return RES_OK;
     }
 
     return RES_PARERR;
 }
 
-//static DISKOPS SpiSdDiskOps = {
+// static DISKOPS SpiSdDiskOps = {
 //	.disk_initialize = disk_initialize,
 //	.disk_status = disk_status,
 //	.disk_read = disk_read,
-//    .disk_write = disk_write
-//};
+//     .disk_write = disk_write
+// };
 //
-//void fatfs_set_ops_spisdcard(void) {
+// void fatfs_set_ops_spisdcard(void) {
 //	FfDiskOps = &SpiSdDiskOps;
-//}
+// }
 
 #endif
