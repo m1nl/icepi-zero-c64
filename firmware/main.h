@@ -40,6 +40,7 @@ enum {
     COMMAND_REBOOT,
     COMMAND_SDCARD_RESET,
     COMMAND_LS,
+    COMMAND_DIR,
     COMMAND_CD,
     COMMAND_PWD,
     COMMAND_HEXDUMP,
@@ -62,10 +63,10 @@ enum {
     COMMAND_MAX
 };
 
-const char *commands[COMMAND_MAX] = {"help",       "reboot",    "sdcard_reset", "ls",     "cd",     "pwd",
-                                     "hexdump",    "mount",     "umount",       "sync",   "format", "tape_load",
-                                     "tape_eject", "cart_load", "cart_eject",   "flags",  "flag",   "console",
-                                     "init",       "reset",     "pause",        "resume", "power"};
+const char *commands[COMMAND_MAX] = {"help",      "reboot",     "sdcard_reset", "ls",         "dir",    "cd",
+                                     "pwd",       "hexdump",    "mount",        "umount",     "sync",   "format",
+                                     "tape_load", "tape_eject", "cart_load",    "cart_eject", "flags",  "flag",
+                                     "console",   "init",       "reset",        "pause",      "resume", "power"};
 
 const struct {
     const char *name;

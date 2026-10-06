@@ -170,31 +170,31 @@ Holding the `Y` button switches the gamepad into keyboard-control mode: the D-pa
 
 The LiteX/VexRiscv SoC exposes a serial console. The `help` command lists every built-in command; they are documented below.
 
-| Command                   | Description                                                                 |
-| ------------------------- | --------------------------------------------------------------------------- |
-| `help`                    | Print the list of available commands.                                       |
-| `reboot`                  | Reboot the VexRiscv SoC (firmware restart, not C64 reset).                  |
-| `sdcard_reset`            | Re-initialise the SPI SD card controller — use if the card was swapped.     |
-| `ls [path]`               | List an SD card directory (current directory if no path is given).         |
-| `cd [path]`               | Change the current SD card directory (defaults to `/`).                     |
-| `pwd`                     | Print the current SD card directory.                                        |
-| `hexdump <addr> [len]`    | Hex dump `len` bytes (default 256) starting at the given memory address.    |
-| `console`                 | Redirect the serial console to the C64 (use `Ctrl+C` to break out).         |
-| `mount <path> [0\|1]`     | Mount a `.d64` disk image for the emulated 1541 (`1` = read-write).         |
-| `umount`                  | Unmount the currently mounted `.d64` image.                                 |
-| `format <path> <label>`   | Create and format a new `.d64` disk image with the given volume label.      |
-| `sync`                    | Commit any pending writes on a read-write mounted `.d64` back to SD card.   |
-| `tape_load <path>`        | Attach a `.tap` tape image to the emulated Datasette.                       |
-| `tape_eject`              | Detach the current `.tap` image.                                            |
-| `cart_load <path>`        | Load CRT file (triggers reset).                                             |
-| `cart_eject`              | Eject CRT file (triggers reset).                                            |
-| `flags`                   | Show every runtime flag, its bit number, current value and description.     |
-| `flag <name or number> [action]` | Enable, disable, or toggle a flag by name or decimal bit number; state is persisted. |
-| `init`                    | Re-initialise the C64: reload saved flags, the default cartridge and 1541 ROM, then reset the CPU. |
-| `reset`                   | Reset the emulated C64 CPU (clears RAM to the cartridge-dependent pattern). |
-| `pause`                   | Halt the C64 CPU clock.                                                     |
-| `resume`                  | Resume the C64 CPU clock after `pause`.                                     |
-| `power`                   | Report voltage, current and power readings from the INA219 on the UPS HAT.  |
+| Command                    | Description                                                                 |
+| -------------------------- | --------------------------------------------------------------------------- |
+| `help`                     | Print the list of available commands.                                       |
+| `reboot`                   | Reboot the VexRiscv SoC (firmware restart, not C64 reset).                  |
+| `sdcard_reset`             | Re-initialise the SPI SD card controller — use if the card was swapped.     |
+| `ls [path]`                | List an SD card directory (current directory if no path is given).          |
+| `cd [path]`                | Change the current SD card directory (defaults to `/`).                     |
+| `pwd`                      | Print the current SD card directory.                                        |
+| `hexdump <addr> [len]`     | Hex dump `len` bytes (default 256) starting at the given memory address.    |
+| `console`                  | Redirect the serial console to the C64 (use `Ctrl+C` to break out).         |
+| `mount <path> [0\|1]`      | Mount a `.d64` disk image for the emulated 1541 (`1` = read-write).         |
+| `umount`                   | Unmount the currently mounted `.d64` image.                                 |
+| `format <path> <label>`    | Create and format a new `.d64` disk image with the given volume label.      |
+| `sync`                     | Commit any pending writes on a read-write mounted `.d64` back to SD card.   |
+| `tape_load <path>`         | Attach a `.tap` tape image to the emulated Datasette.                       |
+| `tape_eject`               | Detach the current `.tap` image.                                            |
+| `cart_load <path>`         | Load CRT file (triggers reset).                                             |
+| `cart_eject`               | Eject CRT file (triggers reset).                                            |
+| `flags`                    | Show every runtime flag, its bit number, current value and description.     |
+| `flag <name\|id> [action]` | Enable, disable, or toggle a flag by name or decimal bit number; state is persisted. |
+| `init`                     | Re-initialise the C64: reload saved flags, the default cartridge and 1541 ROM, then reset the CPU. |
+| `reset`                    | Reset the emulated C64 CPU (clears RAM to the cartridge-dependent pattern). |
+| `pause`                    | Halt the C64 CPU clock.                                                     |
+| `resume`                   | Resume the C64 CPU clock after `pause`.                                     |
+| `power`                    | Report voltage, current and power readings from the INA219 on the UPS HAT.  |
 
 Paths for `ls`, `cd`, `mount`, `format`, `tape_load`, and `cart_load` can be absolute or relative to the current SD card directory. Changing directory updates the console prompt. Use `init` after changing flags that require re-initialisation, such as `c1541_rom_ext`.
 

@@ -361,7 +361,7 @@ static void help_cmd(void) {
     puts("cart_load <path>      - Load CRT file (triggers reset)");
     puts("cart_eject            - Eject CRT file (triggers reset)");
     puts("flags                 - Show current flags");
-    puts("flag <name|number> [0|1|enable|disable|toggle] - Change a flag (auto-saved)");
+    puts("flag <name|id> [0|1]  - Change a flag (auto-saved)");
     puts("init                  - Re-initialize C64 (required for certain flags)");
     puts("reset                 - Reset C64 CPU");
     puts("pause                 - Pause C64 CPU");
@@ -379,14 +379,6 @@ static void console_cmd(void) {
 }
 
 static void reboot_cmd(void) { ctrl_reset_write(1); }
-
-static void flags_cmd(void) {
-    uint32_t flags = c64_control_flags_read();
-    printf("flags = 0x%04lx\n", (unsigned long)flags);
-    for (int i = 0; i < FLAG_DEFS_COUNT; i++)
-        printf("  [%2d] %-24s = %d  %s\n", flag_defs[i].bit, flag_defs[i].name, (int)((flags >> flag_defs[i].bit) & 1),
-               flag_defs[i].desc);
-}
 
 static void flag_cmd(int argc, char **argv) {
     if (argc != 1 && argc != 2) {
@@ -420,6 +412,18 @@ static void flag_cmd(int argc, char **argv) {
         }
     }
     printf("flag: unknown flag: %s\n", name);
+}
+
+static void flags_cmd(int argc, char **argv) {
+    if (argc != 0) {
+        flag_cmd(argc, argv);
+        return;
+    }
+    uint32_t flags = c64_control_flags_read();
+    printf("flags = 0x%04lx\n", (unsigned long)flags);
+    for (int i = 0; i < FLAG_DEFS_COUNT; i++)
+        printf("  [%2d] %-24s = %d  %s\n", flag_defs[i].bit, flag_defs[i].name, (int)((flags >> flag_defs[i].bit) & 1),
+               flag_defs[i].desc);
 }
 
 static void c64_init_cmd(void) { c64_init(); }
@@ -697,6 +701,8 @@ static int console_service(void) {
             sdcard_reset_cmd();
             break;
         case COMMAND_LS:
+            /* fall-through */
+        case COMMAND_DIR:
             ls_cmd(argc, argv);
             break;
         case COMMAND_CD:
@@ -736,7 +742,7 @@ static int console_service(void) {
             c64_cart_eject_cmd();
             break;
         case COMMAND_FLAGS:
-            flags_cmd();
+            flags_cmd(argc, argv);
             break;
         case COMMAND_FLAG:
             flag_cmd(argc, argv);
