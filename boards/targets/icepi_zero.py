@@ -11,6 +11,7 @@
 from litex.build.io import DDROutput
 from litex.build.yosys_wrapper import YosysWrapper
 from litex.gen import *
+
 # from litex.soc.cores.bitbang import I2CMaster
 from litex.soc.cores.clock import *
 from litex.soc.cores.dma import *
@@ -86,8 +87,7 @@ class _CRG(LiteXModule):
 class BaseSoC(SoCCore):
     mem_map = {
         **SoCCore.mem_map,
-        **{"spiflash": 0x20000000, "spi_report": 0xb0000000,
-           "drive_shmem": 0x50000000, "drive_rom": 0x60000000},
+        **{"spiflash": 0x20000000, "spi_report": 0xB0000000, "drive_shmem": 0x50000000, "drive_rom": 0x60000000},
     }
 
     def __init__(
@@ -179,9 +179,9 @@ class BaseSoC(SoCCore):
         # Receive-only SPI report buffer -----------------------------------------------------------
         self.spi_report = SPIReport(platform, platform.request("spi_report"))
         self.bus.add_slave(
-            name="spi_report", slave=self.spi_report.bus,
-            region=SoCRegion(origin=self.mem_map["spi_report"], size=16,
-                             mode="r", cached=False),
+            name="spi_report",
+            slave=self.spi_report.bus,
+            region=SoCRegion(origin=self.mem_map["spi_report"], size=16, mode="r", cached=False),
         )
         if self.irq.enabled:
             self.irq.add("spi_report", use_loc_if_exists=True)
@@ -327,8 +327,12 @@ def main():
     parser.add_target_argument("--device", default="LFE5U-25F", help="FPGA device (LFE5U-25F).")
     parser.add_target_argument("--sdram-rate", default="1:3", help="SDRAM Rate (1:1 or 1:3).")
     parser.add_target_argument("--with-spi-flash", action="store_true", help="Enable memory-mapped SPI flash.")
-    parser.add_target_argument("--with-external-leds", action="store_true", help="Enable expansion-board green/yellow/red LEDs.")
-    parser.add_target_argument("--with-joysticks", action="store_true", help="Enable both expansion-board joystick ports with pull-ups.")
+    parser.add_target_argument(
+        "--with-external-leds", action="store_true", help="Enable expansion-board green/yellow/red LEDs."
+    )
+    parser.add_target_argument(
+        "--with-joysticks", action="store_true", help="Enable both expansion-board joystick ports with pull-ups."
+    )
     parser.add_target_argument("--sys-clk-freq", default=SYS_CLK_FREQUENCY, type=float, help="System clock frequency.")
     parser.add_target_argument(
         "--abc9-delay-target", default=ABC9_DELAY_TARGET_PS, type=int,
@@ -343,6 +347,8 @@ def main():
         l2_size=0,
         bios_lto=True,
         with_spi_flash=True,
+        with_external_leds=True,
+        with_joysticks=True,
         cpu_variant="lite",
         timer_uptime=True,
         libc_mode="minimal",

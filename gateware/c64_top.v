@@ -1269,9 +1269,10 @@ end
 
 assign leds = leds_r;
 
-assign led_g = leds_i[0];  // C64 running
-assign led_y = leds_i[2];  // 1541 activity
-assign led_r = leds_i[1];  // CPU paused / REU DMA
+// Active-high carrier LEDs use raw status; only the onboard leds use PWM.
+assign led_g = !cpu_reset && !vic_reset_req;  // C64 running
+assign led_y = tape_act || c1541_led;         // tape or 1541 activity
+assign led_r = cpu_paused || reu_dma_active;  // CPU paused / REU DMA
 
 assign debug = 9'bzzzzzzzzz;
 
