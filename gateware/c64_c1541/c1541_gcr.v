@@ -82,7 +82,10 @@ endgenerate
 // --- DolphinDOS repeats last GCR byte twice when writing a sector and
 // --- expects SAME GCR byte to be provided during verification
 // --- cannot reproduce them from bytes as they can be invalid GCR bytes
-reg [7:0] gcr_tail[0:20];
+// ---- Reset validity instead of clearing every byte, keeping a single RAM write port.
+(* ram_style = "distributed" *) reg [7:0] gcr_tail[0:20];
+reg [20:0] gcr_tail_valid;
+wire [7:0] gcr_tail_data = gcr_tail_valid[sector] ? gcr_tail[sector] : 8'b0;
 
 // --- Sector state ---
 reg  [4:0] sector;
@@ -276,10 +279,10 @@ always @(*) begin
   else if (header_done) begin
     if (gcr_idx >= gcr_sector_data_size)
       gcr_word_out = 10'h155;
-    else if (|gcr_tail[sector] && gcr_idx >= gcr_sector_data_size - 20)
-      gcr_word_out[9:6] = gcr_tail[sector][3:0];
-    else if (|gcr_tail[sector] && gcr_idx >= gcr_sector_data_size - 30)
-      gcr_word_out[3:0] = gcr_tail[sector][7:4];
+    else if (|gcr_tail_data && gcr_idx >= gcr_sector_data_size - 20)
+      gcr_word_out[9:6] = gcr_tail_data[3:0];
+    else if (|gcr_tail_data && gcr_idx >= gcr_sector_data_size - 30)
+      gcr_word_out[3:0] = gcr_tail_data[7:4];
   end
 end
 
@@ -297,7 +300,21 @@ gcr_decoder gcr_decoder_0 (
   .out(nibble_out)
 );
 
-integer i;
+wire gcr_tail_clear = reset || img_mounted || (track_num_prev != track_num);
+wire gcr_tail_write = !(reset || img_mounted) && !stall && rot_ce &&
+                      state == ST_WRITE && gcr_bit_idx == 9 && byte_cnt == 9'd256;
+
+always @(posedge clk) begin
+  if (gcr_tail_clear)
+    gcr_tail_valid <= 0;
+  else if (gcr_tail_write)
+    gcr_tail_valid[sector] <= 1'b1;
+
+  // record last GCR byte to make DolphinDOS happy
+  // during verifiation
+  if (gcr_tail_write)
+    gcr_tail[sector] <= rx_data;
+end
 
 // --- Sector state machine ---
 always @(posedge clk) begin
@@ -326,9 +343,6 @@ always @(posedge clk) begin
     sector      <= 0;
     data_chksum <= 0;
 
-    for (i = 0; i < 21; i++)
-      gcr_tail[i] <= 8'b0;
-
   end else if (stall) begin
     track_num_prev <= track_num;
     mode_prev      <= mode;
@@ -350,11 +364,6 @@ always @(posedge clk) begin
 
     if (state != ST_SYNC)
       state <= mode ? ST_READ : ST_WRITE;
-
-    if (track_num_prev != track_num) begin
-      for (i = 0; i < 21; i++)
-        gcr_tail[i] <= 8'b0;
-    end
 
   end else if (rot_ce) begin
     case (state)
@@ -429,11 +438,6 @@ always @(posedge clk) begin
           buff_we       <= !byte_cnt[8] && header_done && wps_n;
           buff_en       <= 1;
           buff_addr     <= {sector, byte_cnt[7:0]};
-
-          // record last GCR byte to make DolphinDOS happy
-          // during verifiation
-          if (byte_cnt == 9'd256)
-            gcr_tail[sector] <= rx_data;
 
           // writing sector mark
           if ({buff_din[7:4], nibble_out} == 8'h07 && !header_done) begin
