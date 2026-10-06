@@ -16,6 +16,8 @@ Many thanks to all of the above authors and the MiSTer community — this projec
 
 Hardware used - [IcePi-Zero](https://github.com/cheyao/icepi-zero) FPGA board (Lattice ECP5U-25F with 256Mbit SDRAM)
 
+It also works with the [MiSTle IcePi carrier board](https://github.com/MiSTle-Dev/Boards/tree/main/icepi_carrier), which offers broader USB compatibility with IcePi-Zero through its FPGA Companion.
+
 ### Why this project?
 
 - **100% open-source toolchain.** Every step of the build — synthesis (Yosys), place-and-route (nextpnr), bitstream packing (Project Trellis), SoC generation (LiteX), CPU core (VexRiscv), and firmware (GCC) — is free and open-source. No vendor IDE, no closed IP cores, no license server. You can rebuild the whole system end-to-end from source on a Linux laptop.
@@ -85,7 +87,7 @@ mkdir litex_src
 cd litex_src
 wget https://raw.githubusercontent.com/enjoy-digital/litex/master/litex_setup.py
 chmod +x litex_setup.py
-./litex_setup.py --init --install --tag 2026.04
+./litex_setup.py --init --install --tag 2026.08
 cd ..
 ```
 
@@ -166,14 +168,16 @@ Holding the `Y` button switches the gamepad into keyboard-control mode: the D-pa
 
 ### Firmware console
 
-The LiteX/VexRiscv SoC exposes a serial console (`icepi-c64>` prompt). The `help` command lists every built-in command; they are documented below.
+The LiteX/VexRiscv SoC exposes a serial console. The `help` command lists every built-in command; they are documented below.
 
 | Command                   | Description                                                                 |
 | ------------------------- | --------------------------------------------------------------------------- |
 | `help`                    | Print the list of available commands.                                       |
 | `reboot`                  | Reboot the VexRiscv SoC (firmware restart, not C64 reset).                  |
 | `sdcard_reset`            | Re-initialise the SPI SD card controller — use if the card was swapped.     |
-| `ls [path]`               | List the contents of an SD card directory (root if no path is given).       |
+| `ls [path]`               | List an SD card directory (current directory if no path is given).         |
+| `cd [path]`               | Change the current SD card directory (defaults to `/`).                     |
+| `pwd`                     | Print the current SD card directory.                                        |
 | `hexdump <addr> [len]`    | Hex dump `len` bytes (default 256) starting at the given memory address.    |
 | `console`                 | Redirect the serial console to the C64 (use `Ctrl+C` to break out).         |
 | `mount <path> [0\|1]`     | Mount a `.d64` disk image for the emulated 1541 (`1` = read-write).         |
@@ -186,10 +190,13 @@ The LiteX/VexRiscv SoC exposes a serial console (`icepi-c64>` prompt). The `help
 | `cart_eject`              | Eject CRT file (triggers reset).                                            |
 | `flags`                   | Show every runtime flag, its bit number, current value and description.     |
 | `flag <name> [0\|1]`      | Set (`1`), clear (`0`), or toggle (no argument) a flag; state is persisted. |
+| `init`                    | Re-initialise the C64: reload saved flags, the default cartridge and 1541 ROM, then reset the CPU. |
 | `reset`                   | Reset the emulated C64 CPU (clears RAM to the cartridge-dependent pattern). |
 | `pause`                   | Halt the C64 CPU clock.                                                     |
 | `resume`                  | Resume the C64 CPU clock after `pause`.                                     |
 | `power`                   | Report voltage, current and power readings from the INA219 on the UPS HAT.  |
+
+Paths for `ls`, `cd`, `mount`, `format`, `tape_load`, and `cart_load` can be absolute or relative to the current SD card directory. Changing directory updates the console prompt. Use `init` after changing flags that require re-initialisation, such as `c1541_rom_ext`.
 
 Flag values are auto-saved to a JSON file on the SD card, so any toggle (through `flag`, the `Alt`+key shortcuts, or the overlay) survives a power cycle.
 
