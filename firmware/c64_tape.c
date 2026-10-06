@@ -64,7 +64,7 @@ static void c64_tape_stop(void) {
     }
 }
 
-static void c64_tape_start(void) {
+static int c64_tape_start(void) {
     tap_dma_enable_write(0);
     tap_dma_base_write((uint64_t)(uintptr_t)tap_data);
     tap_dma_length_write(tap_size);
@@ -72,9 +72,16 @@ static void c64_tape_start(void) {
     tap_dma_enable_write(1);
     busy_wait(5);
 
+    if (tap_dma_error_read()) {
+        tap_dma_enable_write(0);
+        printf("c64_tape: DMA start failed\n");
+        return -1;
+    }
+
     if (!c64_control_tape_cass_sense_read()) {
         c64_control_tape_play_write(~c64_control_tape_play_read());
     }
+    return 0;
 }
 
 int c64_tape_load(const char *path) {
@@ -99,6 +106,13 @@ int c64_tape_load(const char *path) {
     }
 
     uint32_t size = f_size(&fil);
+    // The 32-bit DMA requires a whole number of words, including padding.
+    if (size > UINT32_MAX - TAP_FILE_PADDING_LENGTH - 3) {
+        printf("c64_tape_load: file too large\n");
+        f_close(&fil);
+        goto unmount;
+    }
+    uint32_t padded_size = (size + TAP_FILE_PADDING_LENGTH + 3) & ~UINT32_C(3);
 
     if (tap_data) {
         free(tap_data);
@@ -106,9 +120,9 @@ int c64_tape_load(const char *path) {
         tap_size = 0;
     }
 
-    tap_data = malloc(size + TAP_FILE_PADDING_LENGTH);
+    tap_data = malloc(padded_size);
     if (!tap_data) {
-        printf("c64_tape_load: malloc failed for %lu bytes\n", (unsigned long)(size + TAP_FILE_PADDING_LENGTH));
+        printf("c64_tape_load: malloc failed for %lu bytes\n", (unsigned long)padded_size);
         f_close(&fil);
         goto unmount;
     }
@@ -123,8 +137,8 @@ int c64_tape_load(const char *path) {
         goto unmount;
     }
 
-    memset(tap_data + size, TAP_FILE_PADDING_VALUE, TAP_FILE_PADDING_LENGTH);
-    tap_size = size + TAP_FILE_PADDING_LENGTH;
+    memset(tap_data + size, TAP_FILE_PADDING_VALUE, padded_size - size);
+    tap_size = padded_size;
 
     flush_cpu_dcache();
     flush_l2_cache();
@@ -152,7 +166,10 @@ void c64_tape_init(void) { c64_control_ev_enable_write(c64_control_ev_enable_rea
 int c64_tape_service(void) {
     if (tap_play_running_next && !tap_play_running) {
         fputs("\n", stdout);
-        c64_tape_start();
+        if (c64_tape_start() != 0) {
+            tap_play_running_next = 0;
+            return 1;
+        }
         tap_play_running = 1;
         printf("c64_tape: play started\n");
         return 1;
