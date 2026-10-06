@@ -266,7 +266,7 @@ DolphinDOS support requires additional ROM image to be present on the SD card (`
 
 ## Note on AI usage
 
-AI isn’t perfect for Verilog, but it can be useful for design validation. In my experience, I’ve several times simply forgotten to connect a wire, mismatched its width, and a single pass with Claude caught it quickly saving hours of debugging work. It’s also very helpful for instantiating modules and wiring them up in bulk or generating a basic testbench skeleton in Python / Verilator / cocotb. However, when it comes to designing new HDL from scratch, it doesn’t add much value.
+AI got really better with Verilog and HDL design, and is great for validation. In my experience, I’ve several times simply forgotten to connect a wire, mismatched its width, and a single pass with Claude / Codex caught it quickly saving hours of debugging work. It’s also very helpful for instantiating modules and wiring them up in bulk or generating a basic testbench skeleton in Python / Verilator / cocotb.
 
 Within this project, I’ve used AI more effectively for firmware work, where it helps with writing native C code and documentation (including this file) - especially since I’m not a native speaker. That said, the project wasn’t "vibe coded" in any sense; I can still clearly explain every part of both the HDL and firmware :)
 
