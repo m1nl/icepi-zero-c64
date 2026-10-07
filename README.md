@@ -8,6 +8,7 @@ This project integrates several open-source FPGA cores to reproduce functionalit
 - VIC-II graphics chip - https://github.com/randyrossi/vicii-kawari (Randy Rossi)
 - SID 6581 / 8580 sound chip - https://github.com/daglem/reDIP-SID (Dag Lem)
 - CIA 6526 / 8521 I/O chips - https://github.com/daglem/reDIP-CIA (Dag Lem)
+- VIA 6522 I/O chip - https://github.com/daglem/reDIP-CIA (Dag Lem)
 - 1541 floppy drive - based on the C1541 implementation from the [MiSTer C64 core](https://github.com/MiSTer-devel/C64_MiSTer); greatly reworked for this project but still uses that implementation as its base
 
 In addition, the system runs a LiteX SoC with a VexRiscv soft-core CPU to handle system services such as SD card access and ROM loading - https://github.com/enjoy-digital/litex
